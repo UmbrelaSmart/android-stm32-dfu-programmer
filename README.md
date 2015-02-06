@@ -38,8 +38,7 @@ restart the app.
 
 
 ###Tested on###
-Android Tablet, API 19 Kitkat
-to a STM32-P107 Dev Board by Olimex
+Nexus 7 (2012) running Android API 19 (Kitkat) to a STM32-P107 Dev Board by Olimex
 
 ###Limitation###
 Only one .dfu file must be located in the internal 
@@ -57,6 +56,11 @@ Known Issues
 =======
 On some STM32F devices, It takes several tries to recognize
 the USB device.
+
+Contributors
+------
+* Philip Ped
+* Ryan Ramchandar
 
 License
 =======
