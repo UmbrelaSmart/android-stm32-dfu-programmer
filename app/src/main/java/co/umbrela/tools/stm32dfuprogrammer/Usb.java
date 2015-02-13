@@ -34,11 +34,17 @@ public class Usb {
 
     final static String TAG = "Umbrela Client: USB";
 
+    private Context mContext;
+
     private UsbManager mUsbManager;
     private UsbDevice mDevice;
     private UsbDeviceConnection mConnection;
     private UsbInterface mInterface;
     private int mDeviceVersion;
+
+    /* USB DFU ID's (may differ by device) */
+    public final static int USB_VENDOR_ID = 1155;   // VID while in DFU mode 0x0483
+    public final static int USB_PRODUCT_ID = 57105; // PID while in DFU mode 0xDF11
 
     public static final String ACTION_USB_PERMISSION = "com.android.example.USB_PERMISSION";
 
@@ -57,11 +63,12 @@ public class Usb {
         return mDevice;
     }
 
-    /* Broadcast Reciever*/
+    /* Broadcast Receiver*/
     private final BroadcastReceiver mUsbReceiver = new BroadcastReceiver() {
 
         public void onReceive(Context context, Intent intent) {
             String action = intent.getAction();
+
             if (ACTION_USB_PERMISSION.equals(action)) {
                 synchronized (this) {
                     UsbDevice device = intent.getParcelableExtra(UsbManager.EXTRA_DEVICE);
@@ -80,6 +87,11 @@ public class Usb {
                         Log.d(TAG, "permission denied for device " + device);
                     }
                 }
+            } else if (UsbManager.ACTION_USB_DEVICE_ATTACHED.equals(action)) {
+                synchronized (this) {
+                    //request permission for just attached USB Device if it matches the VID/PID
+                    requestPermission(mContext, USB_VENDOR_ID, USB_PRODUCT_ID);
+                }
             }
         }
     };
@@ -88,7 +100,8 @@ public class Usb {
         return mUsbReceiver;
     }
 
-    public Usb() {
+    public Usb(Context context) {
+        mContext = context;
     }
 
     public void setUsbManager(UsbManager usbManager) {

@@ -29,10 +29,6 @@ import android.widget.TextView;
 
 public class MainActivity extends Activity implements Handler.Callback, Usb.OnUsbChangeListener {
 
-    /* USB DFU ID's (may differ by device) */
-    public final static int USB_VENDOR_ID = 1155;   // VID while in DFU mode 0x0483
-    public final static int USB_PRODUCT_ID = 57105; // PID while in DFU mode 0xDF11
-
     private Usb mUsb;
     private Dfu mDfu;
 
@@ -43,7 +39,7 @@ public class MainActivity extends Activity implements Handler.Callback, Usb.OnUs
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        mDfu = new Dfu(USB_VENDOR_ID, USB_PRODUCT_ID);
+        mDfu = new Dfu(Usb.USB_VENDOR_ID, Usb.USB_PRODUCT_ID);
         mTv = (TextView) findViewById(R.id.my_textview);
         mDfu.setTextView(mTv);
 
@@ -68,14 +64,18 @@ public class MainActivity extends Activity implements Handler.Callback, Usb.OnUs
     protected void onStart() {
         super.onStart();
 
-        /* USB */
-        mUsb = new Usb();
+        /* Setup USB */
+        mUsb = new Usb(this);
         mUsb.setUsbManager((UsbManager) getSystemService(Context.USB_SERVICE));
-
-        IntentFilter filter = new IntentFilter(Usb.ACTION_USB_PERMISSION);
-        registerReceiver(mUsb.getmUsbReceiver(), filter);
-        mUsb.requestPermission(this, USB_VENDOR_ID, USB_PRODUCT_ID);
         mUsb.setOnUsbChangeListener(this);
+
+        // Handle two types of intents. Device attachment and permission
+        registerReceiver(mUsb.getmUsbReceiver(), new IntentFilter(Usb.ACTION_USB_PERMISSION));
+        registerReceiver(mUsb.getmUsbReceiver(), new IntentFilter(UsbManager.ACTION_USB_DEVICE_ATTACHED));
+
+        // Handle case where USB device is connected before app launches;
+        // hence ACTION_USB_DEVICE_ATTACHED will not occur so we explicitly call for permission
+        mUsb.requestPermission(this, Usb.USB_VENDOR_ID, Usb.USB_PRODUCT_ID);
     }
 
     @Override
