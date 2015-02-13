@@ -2,11 +2,13 @@
 Brief Description
 =======
 This app is able to mass erase a STM32Fx and
-flash it with firmware from a .dfu file.
+flash it with firmware from a .dfu file. See the accompanying youtube video for a demonstration
+
+[![android-stm32-dfu-programmer video](http://img.youtube.com/vi/UibnT39Rz2E/0.jpg)](http://www.youtube.com/watch?v=UibnT39Rz2E)
 
 ###Notes###
 The USB_VENDOR_ID and USB_PRODUCT_ID in the MainActivity.java 
-file must match your stm32 device, 
+file must match your STM32 device, 
 otherwise the app will not recognize the usb device.
 
 ###Instructions###
@@ -38,7 +40,7 @@ restart the app.
 
 
 ###Tested on###
-Nexus 7 (2012) running Android API 19 (Kitkat) to a STM32-P107 Dev Board by Olimex
+Nexus 7 (2012) running stock Android API 19 (Kitkat) connected via USB to a STM32-P107 Dev Board by Olimex
 
 ###Limitation###
 Only one .dfu file must be located in the internal 
