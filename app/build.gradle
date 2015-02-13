@@ -22,7 +22,7 @@ android {
 
     defaultConfig {
         applicationId "co.umbrela.tools.stm32dfuprogrammer"
-        minSdkVersion 16    /* This can most likely be a lower API version */
+        minSdkVersion 13
         targetSdkVersion 21
         versionCode 1
         versionName "1.0"

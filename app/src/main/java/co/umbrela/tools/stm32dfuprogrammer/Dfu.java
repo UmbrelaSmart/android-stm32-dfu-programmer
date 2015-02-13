@@ -52,12 +52,6 @@ public class Dfu {
     private final static int DFU_GETSTATE = 0x05;
     private final static int DFU_ABORT = 0x06;
 
-    private final static int INT_INTERNAL_FLASH = 0;
-    private final static int INT_OPTION_BYTES = 1;
-    private final static int INT_OTP_MEMORY = 2;
-    private final static int INT_DEVICE_FEATURE = 3;
-
-
     Usb mUsb;
     TextView tv;
     int mDeviceVID;
@@ -99,15 +93,9 @@ public class Dfu {
                 getStatus(dfuStatus);
             } while (dfuStatus.bState != STATE_DFU_IDLE);
 
-            if( isDeviceProtected() == true){
-                unProtectCommand();
-                getStatus(dfuStatus);
-                if(dfuStatus.bState != STATE_DFU_DOWNLOAD_BUSY){
-                    tv.setText("Failed to execute unprotect command");
-                }
-                else {
-                    tv.setText("Read Protection was Enabled. Mass Erase will be performed...Re-open the app ");
-                }
+            if( isDeviceProtected()){
+                removeReadProtection();
+                tv.setText("Read Protection removed. Device resets...Re-open the app ");
             }
             else {
                 massEraseCommand();                 // sent erase command request
@@ -129,7 +117,25 @@ public class Dfu {
         return;
     }
 
-    public void fastErase() {
+    private void removeReadProtection() throws Exception {
+        DFU_Status dfuStatus = new DFU_Status();
+        unProtectCommand();
+        getStatus(dfuStatus);
+        if(dfuStatus.bState != STATE_DFU_DOWNLOAD_BUSY){
+           throw new Exception("Failed to execute unprotect command");
+        }
+        try{
+            getStatus(dfuStatus);
+            while (dfuStatus.bState != STATE_DFU_IDLE){
+                clearStatus();
+                getStatus(dfuStatus);
+            }
+        }catch (Exception e){
+            // device will disconnect itself and stop responding
+        }
+    }
+
+    public void fastOperations() {
 
         // check if usb device is active
         if (mUsb == null || !mUsb.isConnected()) {
@@ -138,40 +144,21 @@ public class Dfu {
         }
 
         DFU_Status dfuStatus = new DFU_Status();
-        byte[] vRangeConfig = new byte[4];
+        byte[] configBytes = new byte[4];
 
         try {
-            do {
-                clearStatus();
-                getStatus(dfuStatus);
-            } while (dfuStatus.bState != STATE_DFU_IDLE);
 
-            setAddressPointer(0xFFFF0000);
-            getStatus(dfuStatus);
-
-            getStatus(dfuStatus);
-            if(dfuStatus.bState == STATE_DFU_ERROR){
-                tv.setText("Fast Operations not supported");
+            if( isDeviceProtected() == true){
+                tv.setText("Device is Read Protected...First Mass Erase");
                 return;
             }
 
-            while(dfuStatus.bState != STATE_DFU_IDLE){
-                clearStatus();
-                getStatus(dfuStatus);
-            }
+            readDeviceFeature(configBytes);
 
-            upload(vRangeConfig,vRangeConfig.length,2);
-            getStatus(dfuStatus);
+            if( configBytes[0] != 0x03) {
+                configBytes[0] = 0x03;
 
-            while (dfuStatus.bState != STATE_DFU_IDLE) {
-                clearStatus();
-                getStatus(dfuStatus);
-            }
-
-            if( vRangeConfig[0] != 0x03) {
-                vRangeConfig[0] = 0x03;
-
-                download(vRangeConfig,vRangeConfig.length,2);
+                download(configBytes,configBytes.length,2);
                 getStatus(dfuStatus);
 
                 getStatus(dfuStatus);
@@ -180,7 +167,6 @@ public class Dfu {
                     getStatus(dfuStatus);
                 }
             }
-
            tv.setText("Fast Operations enabled (Parallelism x32)");
 
         }catch (Exception e){
@@ -212,6 +198,37 @@ public class Dfu {
             detach(myDfuFile.ImageStartAddress);
         } catch (Exception e) {
             tv.append(e.toString());
+        }
+    }
+
+    private void readDeviceFeature(byte[] configBytes) throws Exception {
+
+        DFU_Status dfuStatus = new DFU_Status();
+
+        do {
+            clearStatus();
+            getStatus(dfuStatus);
+        } while (dfuStatus.bState != STATE_DFU_IDLE);
+
+        setAddressPointer(0xFFFF0000);
+        getStatus(dfuStatus);
+
+        getStatus(dfuStatus);
+        if(dfuStatus.bState == STATE_DFU_ERROR){
+            throw new Exception("Fast Operations not supported");
+        }
+
+        while(dfuStatus.bState != STATE_DFU_IDLE){
+            clearStatus();
+            getStatus(dfuStatus);
+        }
+
+        upload(configBytes,configBytes.length,2);
+        getStatus(dfuStatus);
+
+        while (dfuStatus.bState != STATE_DFU_IDLE) {
+            clearStatus();
+            getStatus(dfuStatus);
         }
     }
 
@@ -262,7 +279,7 @@ public class Dfu {
                     for (String file : files) {
                         if (file.endsWith(".dfu")) {
                             myFilePath = extDownload.toString();
-                            myFileName = file.toString();
+                            myFileName = file;
                             break;
                         }
                     }
@@ -486,7 +503,7 @@ public class Dfu {
 
     private void getStatus(DFU_Status status) throws Exception {
         byte[] buffer = new byte[6];
-        int length = mUsb.controlTransfer(DFU_RequestType | USB_DIR_IN, DFU_GETSTATUS, 0, 0, buffer, 0, 6, 500);
+        int length = mUsb.controlTransfer(DFU_RequestType | USB_DIR_IN, DFU_GETSTATUS, 0, 0, buffer, 6, 500);
 
         if (length < 0) {
             throw new Exception("USB Failed during getStatus");
@@ -499,7 +516,7 @@ public class Dfu {
     }
 
     private void clearStatus() throws Exception {
-        int length = mUsb.controlTransfer(DFU_RequestType | USB_DIR_OUT, DFU_CLRSTATUS, 0, 0, null, 0, 0, 0);
+        int length = mUsb.controlTransfer(DFU_RequestType, DFU_CLRSTATUS, 0, 0, null, 0, 0);
         if (length < 0) {
             throw new Exception("USB Failed during clearStatus");
         }
@@ -507,7 +524,7 @@ public class Dfu {
 
     // use for commands
     private void download(byte[] data, int length) throws Exception {
-        int len = mUsb.controlTransfer(DFU_RequestType | USB_DIR_OUT, DFU_DNLOAD, 0, 0, data, 0, length, 0);
+        int len = mUsb.controlTransfer(DFU_RequestType, DFU_DNLOAD, 0, 0, data, length, 0);
         if (len < 0) {
             throw new Exception("USB Failed during command download");
         }
@@ -515,14 +532,14 @@ public class Dfu {
 
     // use for firmware download
     private void download(byte[] data, int length, int nBlock) throws Exception {
-        int len = mUsb.controlTransfer(DFU_RequestType | USB_DIR_OUT, DFU_DNLOAD, nBlock, 0, data, 0, length, 0);
+        int len = mUsb.controlTransfer(DFU_RequestType, DFU_DNLOAD, nBlock, 0, data, length, 0);
         if (len < 0) {
             throw new Exception("USB failed during firmware download");
         }
     }
 
     private void upload(byte[] data, int length, int blockNum ) throws Exception {
-       int len = mUsb.controlTransfer(DFU_RequestType | USB_DIR_IN, DFU_UPLOAD, blockNum, 0, data, 0, length, 100);
+       int len = mUsb.controlTransfer(DFU_RequestType | USB_DIR_IN, DFU_UPLOAD, blockNum, 0, data, length, 100);
         if (len < 0) {
             throw new Exception ("USB comm failed during upload");
         }

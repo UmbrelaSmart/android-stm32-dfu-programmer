@@ -211,15 +211,14 @@ public class Usb {
      * @param index       often 0
      * @param buffer      buffer for data portion of transaction,
      *                    or null if no data needs to be sent or received
-     * @param offset      the index of the first byte in the buffer to send or receive
      * @param length      the length of the data to send or receive
      * @param timeout     50ms f
      * @return length of data transferred (or zero) for success,
      * or negative value for failure
      */
-    public int controlTransfer(int requestType, int request, int value, int index, byte[] buffer, int offset, int length, int timeout) {
+    public int controlTransfer(int requestType, int request, int value, int index, byte[] buffer, int length, int timeout) {
         synchronized (this) {
-            return mConnection.controlTransfer(requestType, request, value, index, buffer, offset, length, timeout);
+            return mConnection.controlTransfer(requestType, request, value, index, buffer, length, timeout);
         }
     }
 }
