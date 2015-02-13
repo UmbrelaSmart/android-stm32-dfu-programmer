@@ -58,6 +58,14 @@ public class MainActivity extends Activity implements Handler.Callback, Usb.OnUs
                 mDfu.program();
             }
         });
+
+        Button forceErase = (Button) findViewById(R.id.btnForceErase);
+        forceErase.setOnClickListener(new Button.OnClickListener(){
+            @Override
+            public void onClick(View v){
+              mDfu.fastOperations();
+            }
+        });
     }
 
     @Override
