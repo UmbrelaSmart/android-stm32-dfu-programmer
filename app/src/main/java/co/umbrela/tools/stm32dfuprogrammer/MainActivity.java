@@ -66,6 +66,14 @@ public class MainActivity extends Activity implements Handler.Callback, Usb.OnUs
               mDfu.fastOperations();
             }
         });
+
+        Button verify = (Button) findViewById(R.id.btnVerify);
+        verify.setOnClickListener(new Button.OnClickListener(){
+            @Override
+            public void onClick(View v){
+                mDfu.verify();
+            }
+        });
     }
 
     @Override
