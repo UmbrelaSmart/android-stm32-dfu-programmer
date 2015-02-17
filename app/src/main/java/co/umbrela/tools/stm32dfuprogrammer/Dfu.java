@@ -17,13 +17,11 @@
 package co.umbrela.tools.stm32dfuprogrammer;
 
 import android.os.Environment;
-import android.util.Log;
 import android.widget.TextView;
 
 import java.io.File;
 import java.io.FileInputStream;
 import java.nio.ByteBuffer;
-import java.util.Arrays;
 
 public class Dfu {
 
@@ -99,19 +97,21 @@ public class Dfu {
 
             if (isDeviceProtected()) {
                 removeReadProtection();
-                tv.setText("Read Protection removed. Device resets...Wait until re-enumerates ");
-            } else {
-                massEraseCommand();                 // sent erase command request
-                getStatus(dfuStatus);                // initiate erase command, returns 'download busy' even if invalid address or ROP
-                int pollingTime = dfuStatus.bwPollTimeout;  // note requested waiting time
-                do {
-                /* wait specified time before next getStatus call */
-                    Thread.sleep(pollingTime);
-                    clearStatus();
-                    getStatus(dfuStatus);
-                } while (dfuStatus.bState != STATE_DFU_IDLE);
-                tv.setText("Mass erase completed in " + (System.currentTimeMillis() - startTime) + " ms");
+                tv.setText("Read Protection removed. Device resets...Wait until it re-enumerates ");
+                return;
             }
+
+            massEraseCommand();                 // sent erase command request
+            getStatus(dfuStatus);                // initiate erase command, returns 'download busy' even if invalid address or ROP
+            int pollingTime = dfuStatus.bwPollTimeout;  // note requested waiting time
+            do {
+            /* wait specified time before next getStatus call */
+                Thread.sleep(pollingTime);
+                clearStatus();
+                getStatus(dfuStatus);
+            } while (dfuStatus.bState != STATE_DFU_IDLE);
+            tv.setText("Mass erase completed in " + (System.currentTimeMillis() - startTime) + " ms");
+
         } catch (InterruptedException e) {
             e.printStackTrace();
         } catch (Exception e) {
@@ -133,8 +133,8 @@ public class Dfu {
 
         try {
 
-            if (isDeviceProtected() == true) {
-                tv.setText("Device is Read Protected...First Mass Erase");
+            if (isDeviceProtected()) {
+                tv.setText("Device is Read-Protected...First Mass Erase");
                 return;
             }
 
@@ -167,16 +167,21 @@ public class Dfu {
             tv.setText("No device connected");
             return;
         }
-        tv.setText("Start Programming \n");
         try {
+            if (isDeviceProtected()) {
+                tv.setText("Device is Read-Protected...First Mass Erase");
+                return;
+            }
+
             openFile();
-            tv.append("File Path: " + mDfuFile.filePath + "\n");
-            tv.append("File Size: " + mDfuFile.buffer.length + " Bytes \n");
             verifyFile();
+            checkCompatibility();
+            tv.setText("File Path: " + mDfuFile.filePath + "\n");
+            tv.append("File Size: " + mDfuFile.buffer.length + " Bytes \n");
             tv.append("ElementAddress: 0x" + Integer.toHexString(mDfuFile.fwStartAddress));
             tv.append("\tElementSize: " + mDfuFile.fwLength + " Bytes\n");
-            checkCompatibility();
             tv.append("Start writing file in blocks of " + mDfuFile.maxBlockSize + " Bytes \n");
+
             long startTime = System.currentTimeMillis();
             writeImage();
             tv.append("Programming completed in " + (System.currentTimeMillis() - startTime) + " ms\n");
@@ -196,44 +201,33 @@ public class Dfu {
             return;
         }
 
-        DFU_Status dfuStatus = new DFU_Status();
-        tv.setText("Start verifying...\n");
-
         try {
+            if( isDeviceProtected()){
+                tv.setText("Device is Read-Protected...First Mass Erase");
+                return;
+            }
+
             if (mDfuFile.filePath == null) {
                 openFile();
                 verifyFile();
                 checkCompatibility();
             }
 
-            while (dfuStatus.bState != STATE_DFU_IDLE) {
-                clearStatus();
-                getStatus(dfuStatus);
-            }
-
-            if (mDfuFile.fwLength <= 0) {
-                return; // todo add reason
-            }
             byte[] deviceFirmware = new byte[mDfuFile.fwLength];
-            setAddressPointer(mDfuFile.fwStartAddress);
-            getStatus(dfuStatus);
-
-
-
-            readImage(deviceFirmware, mDfuFile.maxBlockSize);
+            readImage(deviceFirmware);
 
             // create byte buffer and compare content
             ByteBuffer fileFw = ByteBuffer.wrap(mDfuFile.buffer, mDfuFile.fwOffset, mDfuFile.fwLength);    // set offset and limit of firmware
             ByteBuffer deviceFw = ByteBuffer.wrap(deviceFirmware);    // wrap whole array
 
-            if (fileFw.equals(deviceFw)) {        // compares type, length, content
-                tv.append("device firmware equals file firmware");
+            if (fileFw.equals(deviceFw) ) {        // compares type, length, content
+                tv.setText("device firmware equals file firmware");
             } else {
-                tv.append("device firmware does not equals file firmware");
+                tv.setText("device firmware does not equals file firmware");
             }
         } catch (Exception e) {
             e.printStackTrace();
-            tv.append(e.toString());
+            tv.setText(e.toString());
         }
     }
 
@@ -244,7 +238,6 @@ public class Dfu {
         if (dfuStatus.bState != STATE_DFU_DOWNLOAD_BUSY) {
             throw new Exception("Failed to execute unprotect command");
         }
-
         mUsb.release();
     }
 
@@ -306,35 +299,39 @@ public class Dfu {
         }
     }
 
-    // address must be set before calling this method
-    private void readImage(byte[] deviceFw, int maxBlockSize) throws Exception {
 
-        if ((maxBlockSize < 2) || (maxBlockSize > 2048) || (deviceFw.length < 32)) {
-            throw new Exception("invalid parameters to readImage");
-        }
+    private void readImage(byte[] deviceFw) throws Exception {
 
         DFU_Status dfuStatus = new DFU_Status();
+        int maxBlockSize = mDfuFile.maxBlockSize;
+        int startAddress = mDfuFile.fwStartAddress;
         byte[] block = new byte[maxBlockSize];
         int nBlock;
         int remLength = deviceFw.length;
         int numOfBlocks = remLength / maxBlockSize;
 
-        getStatus(dfuStatus);
-        while (dfuStatus.bState != STATE_DFU_IDLE) {
+        do{
             clearStatus();
             getStatus(dfuStatus);
+        }while (dfuStatus.bState != STATE_DFU_IDLE);
+
+        setAddressPointer(startAddress);
+        getStatus(dfuStatus);   // to execute
+        getStatus(dfuStatus);   //to verify
+        if (dfuStatus.bState == STATE_DFU_ERROR) {
+            throw new Exception("Start address not supported");
         }
+
 
         // will read full and last partial blocks ( NOTE: last partial block will be read with maxkblocksize)
         for (nBlock = 0; nBlock <= numOfBlocks; nBlock++) {
-
-            upload(block, maxBlockSize, nBlock + 2);
-            getStatus(dfuStatus);
 
             while (dfuStatus.bState != STATE_DFU_IDLE) {        // todo if fails, maybe stop reading
                 clearStatus();
                 getStatus(dfuStatus);
             }
+            upload(block, maxBlockSize, nBlock + 2);
+            getStatus(dfuStatus);
 
             if (remLength >= maxBlockSize) {
                 remLength -= maxBlockSize;
@@ -437,6 +434,10 @@ public class Dfu {
         mDfuFile.fwLength |= (mDfuFile.buffer[291] & 0xFF) << 16;
         mDfuFile.fwLength |= (mDfuFile.buffer[292] & 0xFF) << 24;
 
+        if( mDfuFile.fwLength < 32){
+            throw new Exception("Firmware length too short");
+        }
+
         // Get VID, PID and version number
         mDfuFile.VID = (mDfuFile.buffer[Length - 11] & 0xFF) << 8;
         mDfuFile.VID |= (mDfuFile.buffer[Length - 12] & 0xFF);
@@ -483,17 +484,31 @@ public class Dfu {
     private void writeBlock(int address, byte[] block, int blockNumber) throws Exception {
 
         DFU_Status dfuStatus = new DFU_Status();
+
         if (0 == blockNumber) {
             setAddressPointer(address);
-
+            getStatus(dfuStatus);
+            getStatus(dfuStatus);
+            if (dfuStatus.bState == STATE_DFU_ERROR) {
+                throw new Exception("Start address not supported");
+            }
         }
-        getStatus(dfuStatus);
-        while (dfuStatus.bState != STATE_DFU_IDLE) {
+
+        do{
             clearStatus();
             getStatus(dfuStatus);
-        }
+        }while (dfuStatus.bState != STATE_DFU_IDLE);
+
         download(block, block.length, (blockNumber + 2));
-        getStatus(dfuStatus);
+        getStatus(dfuStatus);   // to execute
+        if (dfuStatus.bState != STATE_DFU_DOWNLOAD_BUSY) {
+            throw new Exception("error when downloading, was not busy ");
+        }
+        getStatus(dfuStatus);   // to verify action
+        if (dfuStatus.bState == STATE_DFU_ERROR) {
+            throw new Exception("error when downloading, did not perform action");
+        }
+
         while (dfuStatus.bState != STATE_DFU_IDLE) {
             clearStatus();
             getStatus(dfuStatus);
@@ -529,7 +544,6 @@ public class Dfu {
     private boolean isDeviceProtected() throws Exception {
 
         DFU_Status dfuStatus = new DFU_Status();
-        byte[] readData = new byte[2];
         boolean isProtected = false;
 
         do {
@@ -538,23 +552,17 @@ public class Dfu {
         } while (dfuStatus.bState != STATE_DFU_IDLE);
 
         setAddressPointer(0x08000000);
-        getStatus(dfuStatus);
+        getStatus(dfuStatus); // to execute
+        getStatus(dfuStatus);   // to verify
 
-        do {
-            clearStatus();
-            getStatus(dfuStatus);
-        } while (dfuStatus.bState != STATE_DFU_IDLE);
-
-        try {
-            upload(readData, readData.length, 2);
-        } catch (Exception e) {
+        if (dfuStatus.bState == STATE_DFU_ERROR) {
             isProtected = true;
         }
 
-        do {
+        while (dfuStatus.bState != STATE_DFU_IDLE){
             clearStatus();
             getStatus(dfuStatus);
-        } while (dfuStatus.bState != STATE_DFU_IDLE);
+        }
 
         return isProtected;
     }
@@ -579,6 +587,8 @@ public class Dfu {
         buffer[3] = (byte) ((Address >> 16) & 0xFF);
         buffer[4] = (byte) ((Address >> 24) & 0xFF);
         download(buffer, 5);
+
+
     }
 
     private void leaveDfu() throws Exception {
