@@ -97,6 +97,26 @@
                 android:layout_alignLeft="@+id/btnForceErase"
                 android:layout_alignStart="@+id/btnForceErase" />
 
+            <Button
+                android:id="@+id/btnEnterDFU"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:clickable="true"
+                android:text="Enter DFU mode"
+                android:layout_below="@+id/my_textview"
+                android:layout_toRightOf="@+id/btnForceErase"
+                android:layout_toEndOf="@+id/btnForceErase" />
+
+            <Button
+                android:id="@+id/btnLeaveDFU"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:clickable="true"
+                android:text="Leave DFU mode"
+                android:layout_below="@+id/btnEnterDFU"
+                android:layout_alignLeft="@+id/btnEnterDFU"
+                android:layout_alignStart="@+id/btnEnterDFU" />
+
 
         </RelativeLayout>
     </LinearLayout>

@@ -31,7 +31,6 @@ public class MainActivity extends Activity implements Handler.Callback, Usb.OnUs
 
     private Usb mUsb;
     private Dfu mDfu;
-
     private TextView mTv;
 
     @Override
@@ -74,6 +73,24 @@ public class MainActivity extends Activity implements Handler.Callback, Usb.OnUs
                 mDfu.verify();
             }
         });
+
+        Button enterDfu = (Button) findViewById(R.id.btnEnterDFU);
+        enterDfu.setOnClickListener(new Button.OnClickListener(){
+            @Override
+            public void onClick(View v){
+                Outputs.enterDfuMode();
+            }
+        });
+
+        Button leaveDfu = (Button) findViewById(R.id.btnLeaveDFU);
+        leaveDfu.setOnClickListener(new Button.OnClickListener(){
+            @Override
+            public void onClick(View v){
+                Outputs.leaveDfuMode();
+            }
+        });
+
+
     }
 
     @Override

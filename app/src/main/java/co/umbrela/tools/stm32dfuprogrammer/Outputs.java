@@ -20,59 +20,54 @@ public class Outputs {
     private static final String bootValuePath = "sys/class/gpio/gpio177/value";
     private static final String resetValuePath = "sys/class/gpio/gpio215/value";
 
-    File outReset;
-    File outBoot;
+    private static final File outBoot = new File(bootValuePath);
+    private static final File outReset = new File(resetValuePath);
 
-    public Outputs(){
-        outBoot = new File(bootValuePath);
-        outReset = new File(resetValuePath);
-    }
-
-    public void setReset() {
-        try {
-            FileOutputStream stream = new FileOutputStream(outReset);
-            stream.write('1');
-            stream.close();
-            Log.i(TAG, "set Reset OK");
+    public static void enterDfuMode(){
+        try{
+            setReset();
+            setBoot();
+            clearReset();
+            Log.i(TAG, "entered DFU mode successful");
         } catch (IOException e) {
             Log.e(TAG, e.getMessage());
             // e.printStackTrace();
         }
     }
 
-    public void clearReset(){
-        try {
+    public static void leaveDfuMode(){
+        try{
+            setReset();
+            clearBoot();
+            clearReset();
+            Log.i(TAG, "exited DFU mode successful");
+        } catch (IOException e) {
+            Log.e(TAG, e.getMessage());
+            // e.printStackTrace();
+        }
+    }
+
+    private static void setReset() throws IOException {
+            FileOutputStream stream = new FileOutputStream(outReset);
+            stream.write('1');  // this is active-high
+            stream.close();
+     }
+
+    private static void clearReset()throws IOException {
             FileOutputStream stream = new FileOutputStream(outReset);
             stream.write('0');
             stream.close();
-            Log.i(TAG, "clear Reset OK");
-        } catch (IOException e) {
-            Log.e(TAG, e.getMessage());
-           // e.printStackTrace();
-        }
+     }
+
+    private static void setBoot() throws IOException {
+            FileOutputStream stream = new FileOutputStream(outBoot);
+            stream.write('0');  // this is active-low
+            stream.close();
     }
 
-    public void setBoot(){
-        try {
+    private static void clearBoot() throws IOException {
             FileOutputStream stream = new FileOutputStream(outBoot);
             stream.write('1');
             stream.close();
-            Log.i(TAG, "set Boot OK");
-        } catch (IOException e) {
-            Log.e(TAG, e.getMessage());
-            //e.printStackTrace();
-        }
-    }
-
-    public void clearBoot(){
-        try {
-            FileOutputStream stream = new FileOutputStream(outBoot);
-            stream.write('0');
-            stream.close();
-            Log.i(TAG, "clear Boot OK");
-        } catch (IOException e) {
-            Log.e(TAG, e.getMessage());
-            //e.printStackTrace();
-        }
     }
 }
