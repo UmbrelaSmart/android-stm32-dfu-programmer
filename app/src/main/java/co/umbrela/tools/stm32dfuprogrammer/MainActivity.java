@@ -105,6 +105,8 @@ public class MainActivity extends Activity implements Handler.Callback, Usb.OnUs
         // Handle two types of intents. Device attachment and permission
         registerReceiver(mUsb.getmUsbReceiver(), new IntentFilter(Usb.ACTION_USB_PERMISSION));
         registerReceiver(mUsb.getmUsbReceiver(), new IntentFilter(UsbManager.ACTION_USB_DEVICE_ATTACHED));
+        registerReceiver(mUsb.getmUsbReceiver(), new IntentFilter(UsbManager.ACTION_USB_DEVICE_DETACHED));
+
 
         // Handle case where USB device is connected before app launches;
         // hence ACTION_USB_DEVICE_ATTACHED will not occur so we explicitly call for permission

@@ -92,6 +92,13 @@ public class Usb {
                     //request permission for just attached USB Device if it matches the VID/PID
                     requestPermission(mContext, USB_VENDOR_ID, USB_PRODUCT_ID);
                 }
+            } else if (UsbManager.ACTION_USB_DEVICE_DETACHED.equals(action)) {
+                synchronized (this) {
+                    UsbDevice device = intent.getParcelableExtra(UsbManager.EXTRA_DEVICE);
+                    if (mDevice != null && mDevice.equals(device)) {
+                        release();
+                    }
+                }
             }
         }
     };
