@@ -86,7 +86,8 @@ public class MainActivity extends Activity implements Handler.Callback, Usb.OnUs
         leaveDfu.setOnClickListener(new Button.OnClickListener(){
             @Override
             public void onClick(View v){
-                Outputs.leaveDfuMode();
+                //Outputs.leaveDfuMode();
+                mDfu.leaveDfuMode();
             }
         });
 

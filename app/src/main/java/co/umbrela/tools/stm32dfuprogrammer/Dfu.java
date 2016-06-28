@@ -231,6 +231,19 @@ public class Dfu {
         }
     }
 
+    public void leaveDfuMode() {
+
+        int baseAddress = mDfuFile.fwStartAddress;
+        if ( baseAddress != 0){
+            try {
+                detach(baseAddress);
+            } catch (Exception e) {
+                e.printStackTrace();
+                tv.setText(e.toString());
+            }
+        }
+    }
+
     private void removeReadProtection() throws Exception {
         DFU_Status dfuStatus = new DFU_Status();
         unProtectCommand();
@@ -434,7 +447,7 @@ public class Dfu {
         mDfuFile.fwLength |= (mDfuFile.buffer[291] & 0xFF) << 16;
         mDfuFile.fwLength |= (mDfuFile.buffer[292] & 0xFF) << 24;
 
-        if( mDfuFile.fwLength < 32){
+        if( mDfuFile.fwLength < 512){
             throw new Exception("Firmware length too short");
         }
 
@@ -656,7 +669,7 @@ public class Dfu {
         int maxBlockSize = 1024;
 
         int fwOffset = 293;  // constant offset in buffer where image data starts
-        int fwStartAddress;
+        int fwStartAddress = 0;
         int fwLength;
     }
 
