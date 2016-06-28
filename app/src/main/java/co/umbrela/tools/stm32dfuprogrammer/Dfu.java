@@ -16,15 +16,18 @@
 
 package co.umbrela.tools.stm32dfuprogrammer;
 
+import android.nfc.FormatException;
 import android.os.Environment;
+import android.util.Log;
 import android.widget.TextView;
 
 import java.io.File;
 import java.io.FileInputStream;
 import java.nio.ByteBuffer;
+import java.nio.charset.Charset;
 
 public class Dfu {
-
+    private static final String TAG = "Dfu";
     private final static int USB_DIR_OUT = 0;
     private final static int USB_DIR_IN = 128;       //0x80
     private final static int DFU_RequestType = 0x21;  // '2' => Class request ; '1' => to interface
@@ -52,11 +55,21 @@ public class Dfu {
     private final static int DFU_GETSTATE = 0x05;
     private final static int DFU_ABORT = 0x06;
 
+    public final static int ELEMENT1_OFFSET = 293;  // constant offset in file array where image data starts
+    public final static int TARGET_NAME_START = 22;
+    public final static int TARGET_NAME_MAX_END = 276;
+    public final static int TARGET_SIZE = 277;
+    public final static int TARGET_NUM_ELEMENTS = 281;
+
+    public static final String mInternalFlashString = "@Internal Flash  /0x08000000/04*016Kg,01*064Kg,07*128Kg"; // STM32F405RG, 1MB Flash, 192KB SRAM
+    public static final int mInternalFlashSize = 1048575;
+    public static final int mInternalFlashStartAddress = 0x08000000;
+
     Usb mUsb;
     TextView tv;
     int mDeviceVID;
     int mDevicePID;
-    int mDeviceVersion;  //STM bootloader version
+    int mDeviceBootVersion;  //STM bootloader version
     DfuFile mDfuFile;
 
     public Dfu(int usbVendorId, int usbProductId) {
@@ -75,7 +88,7 @@ public class Dfu {
     }
 
     public void setDeviceVersion(int deviceVersion) {
-        mDeviceVersion = deviceVersion;
+        mDeviceBootVersion = deviceVersion;
     }
 
     public void massErase() {
@@ -177,17 +190,15 @@ public class Dfu {
             verifyFile();
             checkCompatibility();
             tv.setText("File Path: " + mDfuFile.filePath + "\n");
-            tv.append("File Size: " + mDfuFile.buffer.length + " Bytes \n");
-            tv.append("ElementAddress: 0x" + Integer.toHexString(mDfuFile.fwStartAddress));
-            tv.append("\tElementSize: " + mDfuFile.fwLength + " Bytes\n");
+            tv.append("File Size: " + mDfuFile.file.length + " Bytes \n");
+            tv.append("ElementAddress: 0x" + Integer.toHexString(mDfuFile.elementStartAddress));
+            tv.append("\tElementSize: " + mDfuFile.elementLength + " Bytes\n");
             tv.append("Start writing file in blocks of " + mDfuFile.maxBlockSize + " Bytes \n");
 
             long startTime = System.currentTimeMillis();
             writeImage();
             tv.append("Programming completed in " + (System.currentTimeMillis() - startTime) + " ms\n");
 
-            //tv.append("Detached and starting application");
-            // detach(mDfuFile.fwStartAddress);
         } catch (Exception e) {
             e.printStackTrace();
             tv.append(e.toString());
@@ -213,11 +224,11 @@ public class Dfu {
                 checkCompatibility();
             }
 
-            byte[] deviceFirmware = new byte[mDfuFile.fwLength];
+            byte[] deviceFirmware = new byte[mDfuFile.elementLength];
             readImage(deviceFirmware);
 
             // create byte buffer and compare content
-            ByteBuffer fileFw = ByteBuffer.wrap(mDfuFile.buffer, mDfuFile.fwOffset, mDfuFile.fwLength);    // set offset and limit of firmware
+            ByteBuffer fileFw = ByteBuffer.wrap(mDfuFile.file, ELEMENT1_OFFSET, mDfuFile.elementLength);    // set offset and limit of firmware
             ByteBuffer deviceFw = ByteBuffer.wrap(deviceFirmware);    // wrap whole array
 
             if (fileFw.equals(deviceFw) ) {        // compares type, length, content
@@ -232,15 +243,11 @@ public class Dfu {
     }
 
     public void leaveDfuMode() {
-
-        int baseAddress = mDfuFile.fwStartAddress;
-        if ( baseAddress != 0){
-            try {
-                detach(baseAddress);
-            } catch (Exception e) {
-                e.printStackTrace();
-                tv.setText(e.toString());
-            }
+        try {
+            detach(mInternalFlashStartAddress);
+        } catch (Exception e) {
+            e.printStackTrace();
+            tv.setText(e.toString());
         }
     }
 
@@ -287,22 +294,22 @@ public class Dfu {
 
     private void writeImage() throws Exception {
 
-        int address = mDfuFile.fwStartAddress;  // flash start address
-        int BufferOffset = mDfuFile.fwOffset;   // index offset of buffer
+        int address = mDfuFile.elementStartAddress;  // flash start address
+        int fileOffset = ELEMENT1_OFFSET;   // index offset of file
         int blockSize = mDfuFile.maxBlockSize;   // max block size
         byte[] Block = new byte[blockSize];
-        int NumOfBlocks = mDfuFile.fwLength / blockSize;
+        int NumOfBlocks = mDfuFile.elementLength / blockSize;
         int blockNum;
 
         for (blockNum = 0; blockNum < NumOfBlocks; blockNum++) {
-            System.arraycopy(mDfuFile.buffer, (blockNum * blockSize) + BufferOffset, Block, 0, blockSize);
+            System.arraycopy(mDfuFile.file, (blockNum * blockSize) + fileOffset, Block, 0, blockSize);
             // send out the block to device
             writeBlock(address, Block, blockNum);
         }
         // check if last block is partial
-        int remainder = mDfuFile.fwLength - (blockNum * blockSize);
+        int remainder = mDfuFile.elementLength - (blockNum * blockSize);
         if (remainder > 0) {
-            System.arraycopy(mDfuFile.buffer, (blockNum * blockSize) + BufferOffset, Block, 0, remainder);
+            System.arraycopy(mDfuFile.file, (blockNum * blockSize) + fileOffset, Block, 0, remainder);
             // Pad with 0xFF so our CRC matches the ST Bootloader and the ULink's CRC
             while (remainder < Block.length) {
                 Block[remainder++] = (byte) 0xFF;
@@ -317,7 +324,7 @@ public class Dfu {
 
         DFU_Status dfuStatus = new DFU_Status();
         int maxBlockSize = mDfuFile.maxBlockSize;
-        int startAddress = mDfuFile.fwStartAddress;
+        int startAddress = mDfuFile.elementStartAddress;
         byte[] block = new byte[maxBlockSize];
         int nBlock;
         int remLength = deviceFw.length;
@@ -385,11 +392,11 @@ public class Dfu {
 
         myFile = new File(myFilePath + "/" + myFileName);
         mDfuFile.filePath = myFile.toString();
-        mDfuFile.buffer = new byte[(int) myFile.length()];
+        mDfuFile.file = new byte[(int) myFile.length()];
 
         //convert file into byte array
         fileInputStream = new FileInputStream(myFile);
-        fileInputStream.read(mDfuFile.buffer);
+        fileInputStream.read(mDfuFile.file);
         fileInputStream.close();
     }
 
@@ -397,67 +404,94 @@ public class Dfu {
 
         // todo for now i expect the file to be not corrupted
 
-        int Length = mDfuFile.buffer.length;
+        int Length = mDfuFile.file.length;
 
         int crcIndex = Length - 4;
         int crc = 0;
-        crc |= mDfuFile.buffer[crcIndex++] & 0xFF;
-        crc |= (mDfuFile.buffer[crcIndex++] & 0xFF) << 8;
-        crc |= (mDfuFile.buffer[crcIndex++] & 0xFF) << 16;
-        crc |= (mDfuFile.buffer[crcIndex] & 0xFF) << 24;
+        crc |= mDfuFile.file[crcIndex++] & 0xFF;
+        crc |= (mDfuFile.file[crcIndex++] & 0xFF) << 8;
+        crc |= (mDfuFile.file[crcIndex++] & 0xFF) << 16;
+        crc |= (mDfuFile.file[crcIndex] & 0xFF) << 24;
         // do crc check
-        if (crc != calculateCRC(mDfuFile.buffer)) {
+        if (crc != calculateCRC(mDfuFile.file)) {
             throw new Exception("CRC Failed");
         }
 
         // Check the prefix
-        String prefix = new String(mDfuFile.buffer, 0, 5);
+        String prefix = new String(mDfuFile.file, 0, 5);
         if (prefix.compareTo("DfuSe") != 0) {
             throw new Exception("File signature error");
         }
 
         // check dfuSe Version
-        if (mDfuFile.buffer[5] != 1) {
+        if (mDfuFile.file[5] != 1) {
             throw new Exception("DFU file version must be 1");
         }
 
         // Check the suffix
-        String suffix = new String(mDfuFile.buffer, Length - 8, 3);
+        String suffix = new String(mDfuFile.file, Length - 8, 3);
         if (suffix.compareTo("UFD") != 0) {
             throw new Exception("File suffix error");
         }
-        if ((mDfuFile.buffer[Length - 5] != 16) || (mDfuFile.buffer[Length - 10] != 0x1A) || (mDfuFile.buffer[Length - 9] != 0x01)) {
+        if ((mDfuFile.file[Length - 5] != 16) || (mDfuFile.file[Length - 10] != 0x1A) || (mDfuFile.file[Length - 9] != 0x01)) {
             throw new Exception("File number error");
         }
 
         // Now check the target prefix, we assume there is only one target in the file
-        String target = new String(mDfuFile.buffer, 11, 6);
+        String target = new String(mDfuFile.file, 11, 6);
         if (target.compareTo("Target") != 0) {
             throw new Exception("Target signature error");
         }
 
+        if (0 != mDfuFile.file[TARGET_NAME_START]) {
+            String tempName = new String(mDfuFile.file, TARGET_NAME_START, TARGET_NAME_MAX_END);
+            int foundNullAt = tempName.indexOf(0);
+            mDfuFile.TargetName = tempName.substring(0, foundNullAt);
+        } else {
+            throw new FormatException("No Target Name Exist in File");
+        }
+        Log.i(TAG, "Firmware Target Name: " + mDfuFile.TargetName);
+
+        mDfuFile.TargetSize = mDfuFile.file[TARGET_SIZE] & 0xFF;
+        mDfuFile.TargetSize |= (mDfuFile.file[TARGET_SIZE + 1] & 0xFF) << 8;
+        mDfuFile.TargetSize |= (mDfuFile.file[TARGET_SIZE + 2] & 0xFF) << 16;
+        mDfuFile.TargetSize |= (mDfuFile.file[TARGET_SIZE + 3] & 0xFF) << 24;
+
+        Log.i(TAG, "Firmware Target Size: " + mDfuFile.TargetSize);
+
+        mDfuFile.NumElements = mDfuFile.file[TARGET_NUM_ELEMENTS] & 0xFF;
+        mDfuFile.NumElements |= (mDfuFile.file[TARGET_NUM_ELEMENTS + 1] & 0xFF) << 8;
+        mDfuFile.NumElements |= (mDfuFile.file[TARGET_NUM_ELEMENTS + 2] & 0xFF) << 16;
+        mDfuFile.NumElements |= (mDfuFile.file[TARGET_NUM_ELEMENTS + 3] & 0xFF) << 24;
+
+        Log.i(TAG, "Firmware Num of Elements: " + mDfuFile.NumElements);
+
+        if( mDfuFile.NumElements > 1 ){
+            throw new FormatException("Do not support multiple Elements inside Image");
+        }
+
         // Get Element Flash start address and size
-        mDfuFile.fwStartAddress = mDfuFile.buffer[285] & 0xFF;
-        mDfuFile.fwStartAddress |= (mDfuFile.buffer[286] & 0xFF) << 8;
-        mDfuFile.fwStartAddress |= (mDfuFile.buffer[287] & 0xFF) << 16;
-        mDfuFile.fwStartAddress |= (mDfuFile.buffer[288] & 0xFF) << 24;
+        mDfuFile.elementStartAddress = mDfuFile.file[285] & 0xFF;
+        mDfuFile.elementStartAddress |= (mDfuFile.file[286] & 0xFF) << 8;
+        mDfuFile.elementStartAddress |= (mDfuFile.file[287] & 0xFF) << 16;
+        mDfuFile.elementStartAddress |= (mDfuFile.file[288] & 0xFF) << 24;
 
-        mDfuFile.fwLength = mDfuFile.buffer[289] & 0xFF;
-        mDfuFile.fwLength |= (mDfuFile.buffer[290] & 0xFF) << 8;
-        mDfuFile.fwLength |= (mDfuFile.buffer[291] & 0xFF) << 16;
-        mDfuFile.fwLength |= (mDfuFile.buffer[292] & 0xFF) << 24;
+        mDfuFile.elementLength = mDfuFile.file[289] & 0xFF;
+        mDfuFile.elementLength |= (mDfuFile.file[290] & 0xFF) << 8;
+        mDfuFile.elementLength |= (mDfuFile.file[291] & 0xFF) << 16;
+        mDfuFile.elementLength |= (mDfuFile.file[292] & 0xFF) << 24;
 
-        if( mDfuFile.fwLength < 512){
-            throw new Exception("Firmware length too short");
+        if( mDfuFile.elementLength < 512 ){
+            throw new FormatException("Element Size is too small");
         }
 
         // Get VID, PID and version number
-        mDfuFile.VID = (mDfuFile.buffer[Length - 11] & 0xFF) << 8;
-        mDfuFile.VID |= (mDfuFile.buffer[Length - 12] & 0xFF);
-        mDfuFile.PID = (mDfuFile.buffer[Length - 13] & 0xFF) << 8;
-        mDfuFile.PID |= (mDfuFile.buffer[Length - 14] & 0xFF);
-        mDfuFile.Version = (mDfuFile.buffer[Length - 15] & 0xFF) << 8;
-        mDfuFile.Version |= (mDfuFile.buffer[Length - 16] & 0xFF);
+        mDfuFile.VID = (mDfuFile.file[Length - 11] & 0xFF) << 8;
+        mDfuFile.VID |= (mDfuFile.file[Length - 12] & 0xFF);
+        mDfuFile.PID = (mDfuFile.file[Length - 13] & 0xFF) << 8;
+        mDfuFile.PID |= (mDfuFile.file[Length - 14] & 0xFF);
+        mDfuFile.BootVersion = (mDfuFile.file[Length - 15] & 0xFF) << 8;
+        mDfuFile.BootVersion |= (mDfuFile.file[Length - 16] & 0xFF);
     }
 
     private int calculateCRC(byte[] FileData) {
@@ -474,13 +508,27 @@ public class Dfu {
             throw new Exception("PID/VID Miss match");
         }
 
+        mDeviceBootVersion = mUsb.getDeviceVersion();
+
         // give warning and continue on
-        if (mDeviceVersion != mDfuFile.Version) {
-            tv.append("Warning: Device Version: " + Integer.toHexString(mDeviceVersion) +
-                    "\tFile Version: " + Integer.toHexString(mDfuFile.Version) + "\n");
+        if (mDeviceBootVersion != mDfuFile.BootVersion) {
+            tv.append("Warning: Device BootVersion: " + Integer.toHexString(mDeviceBootVersion) +
+                    "\tFile BootVersion: " + Integer.toHexString(mDfuFile.BootVersion) + "\n");
         }
 
-        switch (mDeviceVersion) {
+        if (mDfuFile.elementStartAddress != mInternalFlashStartAddress) {
+            throw new FormatException("Firmware does not start at beginning of internal flash");
+        }
+
+        if (deviceSizeLimit() < 0) {
+            throw new Exception("Error: Could Not Retrieve Internal Flash String");
+        }
+
+        if ( mDfuFile.TargetSize >= mInternalFlashSize ){
+            throw new FormatException("Firmware image too large for target");
+        }
+
+        switch (mDeviceBootVersion) {
             case 0x011A:
             case 0x0200:
                 mDfuFile.maxBlockSize = 1024;
@@ -493,6 +541,31 @@ public class Dfu {
                 throw new Exception("Error: Unsupported bootloader version\n");
         }
     }
+
+    private int deviceSizeLimit() {   // retrieves and compares the Internal Flash Memory Size  and compares to constant string
+
+        int bmRequest = 0x80;       // IN, standard request to usb device
+        byte bRequest = (byte) 0x06; // USB_REQ_GET_DESCRIPTOR
+        byte wLength = (byte) 127;   // max string size
+        byte[] descriptor = new byte[wLength];
+
+        /* This method can be used to retrieve any memory location size by incrementing the wValue in the defined range.
+            ie. Size of: Internal Flash,  Option Bytes, OTP Size, and Feature location
+         */
+        int wValue = 0x0304;        // possible strings range from 0x304-0x307
+
+        int len = mUsb.controlTransfer(bmRequest, bRequest, wValue, 0, descriptor, wLength, 500);
+        if (len < 0) {
+            return -1;
+        }
+        String decoded = new String(descriptor, Charset.forName("UTF-16LE"));
+        if (decoded.contains(mInternalFlashString)) {
+            return mInternalFlashSize; // size of stm32f405RG
+        } else {
+            return -1;
+        }
+    }
+
 
     private void writeBlock(int address, byte[] block, int blockNumber) throws Exception {
 
@@ -662,15 +735,18 @@ public class Dfu {
     // holds all essential information for the Dfu File
     private class DfuFile {
         String filePath;
-        byte[] buffer;
+        byte[] file;
         int PID;
         int VID;
-        int Version;
+        int BootVersion;
         int maxBlockSize = 1024;
 
-        int fwOffset = 293;  // constant offset in buffer where image data starts
-        int fwStartAddress = 0;
-        int fwLength;
+        int elementStartAddress;
+        int elementLength;
+
+        String TargetName;
+        int TargetSize;
+        int NumElements;
     }
 
     private static final int[] CrcTable = {
