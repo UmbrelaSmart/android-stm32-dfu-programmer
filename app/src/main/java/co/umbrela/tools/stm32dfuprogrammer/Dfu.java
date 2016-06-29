@@ -468,6 +468,13 @@ public class Dfu {
 
         if( mDfuFile.NumElements > 1 ){
             throw new FormatException("Do not support multiple Elements inside Image");
+            /*  If you get this error, that means that the C-compiler IDE is treating the Reset Vector ISR
+                and the data ( your code) as two separate elements.
+                This problem has been observed with The Atollic TrueStudio V5.5.2
+                The version of Atollic that works with this is v5.3.0
+                The version of DfuSe FileManager is v3.0.3
+                Refer to ST document UM0391 for more details on DfuSe format
+             */
         }
 
         // Get Element Flash start address and size
