@@ -117,6 +117,15 @@
                 android:layout_alignLeft="@+id/btnEnterDFU"
                 android:layout_alignStart="@+id/btnEnterDFU" />
 
+            <Button
+                android:id="@+id/btnReleaseReset"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:clickable="true"
+                android:layout_below="@+id/my_textview"
+                android:layout_toRightOf="@+id/btnEnterDFU"
+                android:text="Normal Mode" />
+
 
         </RelativeLayout>
     </LinearLayout>

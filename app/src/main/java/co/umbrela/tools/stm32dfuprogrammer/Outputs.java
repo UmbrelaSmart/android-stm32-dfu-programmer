@@ -17,8 +17,8 @@ import java.io.IOException;
 public class Outputs {
 
     private static final String TAG = "Umbrela Outputs";
-    private static final String bootValuePath = "sys/class/gpio/gpio177/value";
-    private static final String resetValuePath = "sys/class/gpio/gpio215/value";
+    private static final String bootValuePath = "/sys/class/gpio_sw/PD1/data";
+    private static final String resetValuePath = "/sys/class/gpio_sw/PD0/data";
 
     private static final File outBoot = new File(bootValuePath);
     private static final File outReset = new File(resetValuePath);
@@ -29,6 +29,17 @@ public class Outputs {
             setBoot();
             clearReset();
             Log.i(TAG, "entered DFU mode successful");
+        } catch (IOException e) {
+            Log.e(TAG, e.getMessage());
+            // e.printStackTrace();
+        }
+    }
+
+    public static void enterNormalMode(){
+        try{
+            clearReset();
+            clearBoot();
+            Log.i(TAG, "entered Normal mode successful");
         } catch (IOException e) {
             Log.e(TAG, e.getMessage());
             // e.printStackTrace();
@@ -49,25 +60,25 @@ public class Outputs {
 
     private static void setReset() throws IOException {
             FileOutputStream stream = new FileOutputStream(outReset);
-            stream.write('1');  // this is active-high
+            stream.write('0');  // this is active-low
             stream.close();
      }
 
     private static void clearReset()throws IOException {
             FileOutputStream stream = new FileOutputStream(outReset);
-            stream.write('0');
+            stream.write('1');
             stream.close();
      }
 
     private static void setBoot() throws IOException {
             FileOutputStream stream = new FileOutputStream(outBoot);
-            stream.write('0');  // this is active-low
+            stream.write('1');  // this is active-high
             stream.close();
     }
 
     private static void clearBoot() throws IOException {
             FileOutputStream stream = new FileOutputStream(outBoot);
-            stream.write('1');
+            stream.write('0');
             stream.close();
     }
 }

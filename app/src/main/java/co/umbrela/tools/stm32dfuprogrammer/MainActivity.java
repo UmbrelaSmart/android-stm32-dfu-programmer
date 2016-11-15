@@ -90,6 +90,13 @@ public class MainActivity extends Activity implements Handler.Callback, Usb.OnUs
                 mDfu.leaveDfuMode();
             }
         });
+        Button releaseReset = (Button) findViewById(R.id.btnReleaseReset);
+        releaseReset.setOnClickListener(new Button.OnClickListener(){
+            @Override
+            public void onClick(View v){
+                Outputs.enterNormalMode();
+            }
+        });
 
 
     }
