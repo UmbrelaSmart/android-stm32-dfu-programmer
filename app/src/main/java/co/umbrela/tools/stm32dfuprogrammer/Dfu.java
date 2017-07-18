@@ -27,6 +27,8 @@ import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
 import java.nio.charset.Charset;
+import java.io.FileNotFoundException;
+import java.io.IOException;
 
 @SuppressWarnings("unused")
 public class Dfu {
@@ -64,9 +66,22 @@ public class Dfu {
     public final static int TARGET_SIZE = 277;
     public final static int TARGET_NUM_ELEMENTS = 281;
 
+
+    // Device specific parameters
     public static final String mInternalFlashString = "@Internal Flash  /0x08000000/04*016Kg,01*064Kg,07*128Kg"; // STM32F405RG, 1MB Flash, 192KB SRAM
     public static final int mInternalFlashSize = 1048575;
     public static final int mInternalFlashStartAddress = 0x08000000;
+    public static final int mOptionByteStartAddress = 0x1FFFC000;
+    private static final int OPT_BOR_1 = 0x08;
+    private static final int OPT_BOR_2 = 0x04;
+    private static final int OPT_BOR_3 = 0x00;
+    private static final int OPT_BOR_OFF = 0x0C;
+    private static final int OPT_WDG_SW = 0x20;
+    private static final int OPT_nRST_STOP = 0x40;
+    private static final int OPT_nRST_STDBY = 0x80;
+    private static final int OPT_RDP_OFF = 0xAA00;
+    private static final int OPT_RDP_1 = 0x3300;
+
 
 
     private final int deviceVid;
@@ -105,6 +120,77 @@ public class Dfu {
         this.deviceVersion = this.usb.getDeviceVersion();
     }
 
+    /* One-Click Programming Method to fully flash the connected device
+         This will try everything that it can do to program, if it throws execptions
+         it failed on something it cannot fix.
+  */
+    public boolean programFirmware(String filePath) throws Exception {
+
+        final int MAX_ALLOWED_RETRIES = 5;
+
+        openFile(filePath);
+        verifyFile();
+        checkCompatibility();
+
+        if (isDeviceProtected()) {
+            Log.i(TAG, "Device is protected");
+            Log.i(TAG, "Removing Read Protection");
+            removeReadProtection();
+            Log.i(TAG, "Device is resetting");
+            return false;       // device will reset
+        }
+        for (int i = MAX_ALLOWED_RETRIES + 1; i > 0; i--) {
+            if (isDeviceBlank())
+                break;
+            if (i == 1) {
+                throw new Exception("Cannot Mass Erase, REPLACE UNIT!");
+            }
+            Log.i(TAG, "Device not blank, erasing");
+            massErase();
+        }
+        writeImage();
+        for (int i = MAX_ALLOWED_RETRIES + 1; i > 0; i--) {
+            if (isWrittenImageOk()) {
+                Log.i(TAG, "Writing Option Bytes, will self-reset");
+                int selectOptions = OPT_RDP_OFF | OPT_WDG_SW | OPT_nRST_STOP | OPT_nRST_STDBY | OPT_BOR_1;  // todo in production, OPT_RDP_1 must be set instead of OPT_RDP_OFF
+                writeOptionBytes(selectOptions);   // will reset device
+                break;
+            }
+            if (i == 1) {
+                throw new Exception("Cannot Write successfully, REPLACE UNIT!");
+            }
+            Log.i(TAG, "Verification failed, retry");
+            massErase();
+            writeImage();
+        }
+
+        return true;
+    }
+
+    private boolean isDeviceBlank() throws Exception {
+
+        byte[] readContent = new byte[mDfuFile.elementLength];
+        readImage(readContent);
+        ByteBuffer read = ByteBuffer.wrap(readContent);    // wrap whole array
+        int hash = read.hashCode();
+        return (mDfuFile.elementLength == Math.abs(hash));
+    }
+
+    // similar to verify()
+    private boolean isWrittenImageOk() throws Exception {
+        byte[] deviceFirmware = new byte[mDfuFile.elementLength];
+        long startTime = System.currentTimeMillis();
+        readImage(deviceFirmware);
+        // create byte buffer and compare content
+        ByteBuffer fileFw = ByteBuffer.wrap(mDfuFile.file, ELEMENT1_OFFSET, mDfuFile.elementLength);    // set offset and limit of firmware
+        ByteBuffer deviceFw = ByteBuffer.wrap(deviceFirmware);    // wrap whole array
+        boolean result = fileFw.equals(deviceFw);
+        Log.i(TAG, "Verified completed in " + (System.currentTimeMillis() - startTime) + " ms");
+        return result;
+    }
+
+
+
     public void massErase() {
 
         if (!isUsbConnected()) return;
@@ -120,7 +206,7 @@ public class Dfu {
 
             if (isDeviceProtected()) {
                 removeReadProtection();
-                onStatusMsg("Read Protection removed. Device resets...Wait until it re-enumerates ");
+                onStatusMsg("Read Protection removed. Device resets...Wait until it   re-enumerates "); // XXX This will reset the device
                 return;
             }
 
@@ -161,7 +247,7 @@ public class Dfu {
             if (configBytes[0] != 0x03) {
                 configBytes[0] = 0x03;
 
-                download(configBytes, configBytes.length, 2);
+                download(configBytes, 2);
                 getStatus(dfuStatus);
 
                 getStatus(dfuStatus);
@@ -206,7 +292,6 @@ public class Dfu {
             e.printStackTrace();
             onStatusMsg(e.toString());
         }
-        // usb.release();
     }
 
     public void verify() {
@@ -225,7 +310,7 @@ public class Dfu {
                 checkCompatibility();
             }
 
-            byte[] deviceFirmware = new byte[dfuFile.fwLength];
+            byte[] deviceFirmware = new byte[dfuFile.elementLength];
             readImage(deviceFirmware);
 
             // create byte buffer and compare content
@@ -268,7 +353,8 @@ public class Dfu {
         if (dfuStatus.bState != STATE_DFU_DOWNLOAD_BUSY) {
             throw new Exception("Failed to execute unprotect command");
         }
-        usb.release();
+        mUsb.release();     // XXX device will self-reset
+        Log.i(TAG, "USB was released");
     }
 
     private void readDeviceFeature(byte[] configBytes) throws Exception {
@@ -372,6 +458,30 @@ public class Dfu {
         }
     }
 
+    // this can be used if the filePath is known to .dfu file
+    private void openFile(String filePath) throws Exception {
+
+        if (filePath == null) {
+            throw new FileNotFoundException("No file selected");
+        }
+        File myFile = new File(filePath);
+        if (!myFile.exists()) {
+            throw new FileNotFoundException("Cannot find: " + myFile.toString());
+        }
+        if (!myFile.canRead()) {
+            throw new FormatException("Cannot open: " + myFile.toString());
+        }
+        mDfuFile.filePath = myFile.toString();
+        mDfuFile.file = new byte[(int) myFile.length()];
+        //convert file into byte array
+        FileInputStream fileInputStream = new FileInputStream(myFile);
+        int readLength = fileInputStream.read(mDfuFile.file);
+        fileInputStream.close();
+        if (readLength != myFile.length()) {
+            throw new IOException("Could Not Read File");
+        }
+    }
+
     private void openFile() throws Exception {
 
         File extDownload;
@@ -424,33 +534,33 @@ public class Dfu {
         crc |= (mDfuFile.file[crcIndex] & 0xFF) << 24;
         // do crc check
         if (crc != calculateCRC(mDfuFile.file)) {
-            throw new Exception("CRC Failed");
+            throw new FormatException("CRC Failed");
         }
 
         // Check the prefix
         String prefix = new String(mDfuFile.file, 0, 5);
         if (prefix.compareTo("DfuSe") != 0) {
-            throw new Exception("File signature error");
+            throw new FormatException("File signature error");
         }
 
         // check dfuSe Version
         if (mDfuFile.file[5] != 1) {
-            throw new Exception("DFU file version must be 1");
+            throw new FormatException("DFU file version must be 1");
         }
 
         // Check the suffix
         String suffix = new String(mDfuFile.file, Length - 8, 3);
         if (suffix.compareTo("UFD") != 0) {
-            throw new Exception("File suffix error");
+            throw new FormatException("File suffix error");
         }
         if ((mDfuFile.file[Length - 5] != 16) || (mDfuFile.file[Length - 10] != 0x1A) || (mDfuFile.file[Length - 9] != 0x01)) {
-            throw new Exception("File number error");
+            throw new FormatException("File number error");
         }
 
         // Now check the target prefix, we assume there is only one target in the file
         String target = new String(mDfuFile.file, 11, 6);
         if (target.compareTo("Target") != 0) {
-            throw new Exception("Target signature error");
+            throw new FormatException("Target signature error");
         }
 
         if (0 != mDfuFile.file[TARGET_NAME_START]) {
@@ -511,10 +621,18 @@ public class Dfu {
         mDfuFile.BootVersion |= (mDfuFile.file[Length - 16] & 0xFF);
     }
 
+    private int calculateCRC(byte[] FileData) {
+        int crc = -1;
+        for (int i = 0; i < FileData.length - 4; i++) {
+            crc = CrcTable[(crc ^ FileData[i]) & 0xff] ^ (crc >>> 8);
+        }
+        return crc;
+    }
+
     private void checkCompatibility() throws Exception {
 
-        if ((devicePid != dfuFile.PID) || (deviceVid != dfuFile.VID)) {
-            throw new Exception("PID/VID Miss match");
+        if ((mDevicePID != mDfuFile.PID) || (mDeviceVID != mDfuFile.VID)) {
+            throw new FormatException("PID/VID Miss match");
         }
 
         mDeviceBootVersion = mUsb.getDeviceVersion();
@@ -525,7 +643,7 @@ public class Dfu {
                     "\tFile BootVersion: " + Integer.toHexString(mDfuFile.BootVersion) + "\n");
         }
 
-        if (mDfuFile.elementStartAddress != mInternalFlashStartAddress) {
+        if (mDfuFile.elementStartAddress != mInternalFlashStartAddress) { // todo: this will fail with images for other memory sections, other than Internal Flash
             throw new FormatException("Firmware does not start at beginning of internal flash");
         }
 
@@ -533,7 +651,8 @@ public class Dfu {
             throw new Exception("Error: Could Not Retrieve Internal Flash String");
         }
 
-        if ( mDfuFile.TargetSize >= mInternalFlashSize ){
+        if ((mDfuFile.elementStartAddress + mDfuFile.elementLength) >=
+                (mInternalFlashStartAddress + mInternalFlashSize)) {
             throw new FormatException("Firmware image too large for target");
         }
 
@@ -547,10 +666,13 @@ public class Dfu {
                 dfuFile.maxBlockSize = 2048;
                 break;
             default:
-                throw new Exception("Error: Unsupported bootloader version\n");
+                throw new Exception("Error: Unsupported bootloader version");
         }
+        Log.i(TAG, "Firmware ok and compatible");
+
     }
 
+    // todo this is limited to stm32f405RG and will fail for other future chips.
     private int deviceSizeLimit() {   // retrieves and compares the Internal Flash Memory Size  and compares to constant string
 
         int bmRequest = 0x80;       // IN, standard request to usb device
@@ -580,6 +702,11 @@ public class Dfu {
 
         DfuStatus dfuStatus = new DfuStatus();
 
+        do {
+            clearStatus();
+            getStatus(dfuStatus);
+        } while (dfuStatus.bState != STATE_DFU_IDLE);
+
         if (0 == blockNumber) {
             setAddressPointer(address);
             getStatus(dfuStatus);
@@ -594,7 +721,7 @@ public class Dfu {
             getStatus(dfuStatus);
         } while (dfuStatus.bState != STATE_DFU_IDLE);
 
-        download(block, block.length, (blockNumber + 2));
+        download(block,(blockNumber + 2));
         getStatus(dfuStatus);   // to execute
         if (dfuStatus.bState != STATE_DFU_DOWNLOAD_BUSY) {
             throw new Exception("error when downloading, was not busy ");
@@ -646,32 +773,55 @@ public class Dfu {
             getStatus(dfuStatus);
         } while (dfuStatus.bState != STATE_DFU_IDLE);
 
-        setAddressPointer(0x08000000);
+        setAddressPointer(mInternalFlashStartAddress);
         getStatus(dfuStatus); // to execute
         getStatus(dfuStatus);   // to verify
 
         if (dfuStatus.bState == STATE_DFU_ERROR) {
             isProtected = true;
         }
-
-        while (dfuStatus.bState != STATE_DFU_IDLE) {
+        while (dfuStatus.bState != STATE_DFU_IDLE){
             clearStatus();
             getStatus(dfuStatus);
         }
-
         return isProtected;
+    }
+
+    public void writeOptionBytes(int options) throws Exception {
+
+        DFU_Status dfuStatus = new DFU_Status();
+
+        do {
+            clearStatus();
+            getStatus(dfuStatus);
+        } while (dfuStatus.bState != STATE_DFU_IDLE);
+
+        setAddressPointer(mOptionByteStartAddress);
+        getStatus(dfuStatus);
+        getStatus(dfuStatus);
+        if (dfuStatus.bState == STATE_DFU_ERROR) {
+            throw new Exception("Option Byte Start address not supported");
+        }
+
+        Log.i(TAG, "writing options: 0x" + Integer.toHexString(options));
+
+        byte[] buffer = new byte[2];
+        buffer[0] = (byte) (options & 0xFF);
+        buffer[1] = (byte) ((options >> 8) & 0xFF);
+        download(buffer);
+        getStatus(dfuStatus);       // device will reset
     }
 
     private void massEraseCommand() throws Exception {
         byte[] buffer = new byte[1];
         buffer[0] = 0x41;
-        download(buffer, 1);
+        download(buffer);
     }
 
     private void unProtectCommand() throws Exception {
         byte[] buffer = new byte[1];
         buffer[0] = (byte) 0x92;
-        download(buffer, 1);
+        download(buffer);
     }
 
     private void setAddressPointer(int Address) throws Exception {
@@ -681,11 +831,11 @@ public class Dfu {
         buffer[2] = (byte) ((Address >> 8) & 0xFF);
         buffer[3] = (byte) ((Address >> 16) & 0xFF);
         buffer[4] = (byte) ((Address >> 24) & 0xFF);
-        download(buffer, 5);
+        download(buffer);
     }
 
     private void leaveDfu() throws Exception {
-        download(null, 0);
+        download(null);
     }
 
     private void getStatus(DfuStatus status) throws Exception {
@@ -710,16 +860,16 @@ public class Dfu {
     }
 
     // use for commands
-    private void download(byte[] data, int length) throws Exception {
-        int len = usb.controlTransfer(DFU_RequestType, DFU_DNLOAD, 0, 0, data, length, 0);
+    private void download(byte[] data) throws Exception {
+        int len = mUsb.controlTransfer(DFU_RequestType, DFU_DNLOAD, 0, 0, data, data.length, 50);
         if (len < 0) {
             throw new Exception("USB Failed during command download");
         }
     }
 
     // use for firmware download
-    private void download(byte[] data, int length, int nBlock) throws Exception {
-        int len = usb.controlTransfer(DFU_RequestType, DFU_DNLOAD, nBlock, 0, data, length, 0);
+    private void download(byte[] data, int nBlock) throws Exception {
+        int len = mUsb.controlTransfer(DFU_RequestType, DFU_DNLOAD, nBlock, 0, data, data.length, 0);
         if (len < 0) {
             throw new Exception("USB failed during firmware download");
         }
