@@ -30,26 +30,26 @@ import android.widget.TextView;
 public class MainActivity extends Activity implements
         Handler.Callback, Usb.OnUsbChangeListener, Dfu.DfuListener {
 
-    private Usb mUsb;
-    private Dfu mDfu;
+    private Usb usb;
+    private Dfu dfu;
 
-    private TextView mTv;
+    private TextView status;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        mDfu = new Dfu(Usb.USB_VENDOR_ID, Usb.USB_PRODUCT_ID);
-        mDfu.setListener(this);
+        dfu = new Dfu(Usb.USB_VENDOR_ID, Usb.USB_PRODUCT_ID);
+        dfu.setListener(this);
 
-        mTv = findViewById(R.id.my_textview);
+        status = findViewById(R.id.status);
 
         Button massErase = findViewById(R.id.btnMassErase);
         massErase.setOnClickListener(new Button.OnClickListener() {
             @Override
             public void onClick(View v) {
-                mDfu.massErase();
+                dfu.massErase();
             }
         });
 
@@ -57,7 +57,7 @@ public class MainActivity extends Activity implements
         program.setOnClickListener(new Button.OnClickListener() {
             @Override
             public void onClick(View v) {
-                mDfu.program();
+                dfu.program();
             }
         });
 
@@ -65,7 +65,7 @@ public class MainActivity extends Activity implements
         forceErase.setOnClickListener(new Button.OnClickListener() {
             @Override
             public void onClick(View v) {
-                mDfu.fastOperations();
+                dfu.fastOperations();
             }
         });
 
@@ -73,7 +73,7 @@ public class MainActivity extends Activity implements
         verify.setOnClickListener(new Button.OnClickListener() {
             @Override
             public void onClick(View v) {
-                mDfu.verify();
+                dfu.verify();
             }
         });
     }
@@ -83,17 +83,17 @@ public class MainActivity extends Activity implements
         super.onStart();
 
         /* Setup USB */
-        mUsb = new Usb(this);
-        mUsb.setUsbManager((UsbManager) getSystemService(Context.USB_SERVICE));
-        mUsb.setOnUsbChangeListener(this);
+        usb = new Usb(this);
+        usb.setUsbManager((UsbManager) getSystemService(Context.USB_SERVICE));
+        usb.setOnUsbChangeListener(this);
 
         // Handle two types of intents. Device attachment and permission
-        registerReceiver(mUsb.getmUsbReceiver(), new IntentFilter(Usb.ACTION_USB_PERMISSION));
-        registerReceiver(mUsb.getmUsbReceiver(), new IntentFilter(UsbManager.ACTION_USB_DEVICE_ATTACHED));
+        registerReceiver(usb.getmUsbReceiver(), new IntentFilter(Usb.ACTION_USB_PERMISSION));
+        registerReceiver(usb.getmUsbReceiver(), new IntentFilter(UsbManager.ACTION_USB_DEVICE_ATTACHED));
 
         // Handle case where USB device is connected before app launches;
         // hence ACTION_USB_DEVICE_ATTACHED will not occur so we explicitly call for permission
-        mUsb.requestPermission(this, Usb.USB_VENDOR_ID, Usb.USB_PRODUCT_ID);
+        usb.requestPermission(this, Usb.USB_VENDOR_ID, Usb.USB_PRODUCT_ID);
     }
 
     @Override
@@ -101,16 +101,17 @@ public class MainActivity extends Activity implements
         super.onStop();
 
         /* USB */
-        mDfu.setmUsb(null);
-        mUsb.release();
+        dfu.setUsb(null);
+        usb.release();
         try {
-            unregisterReceiver(mUsb.getmUsbReceiver());
+            unregisterReceiver(usb.getmUsbReceiver());
         } catch (IllegalArgumentException e) { /* Already unregistered */ }
     }
 
     @Override
     public void onStatusMsg(String msg) {
-        mTv.append(msg);
+        // TODO since we are appending we should make the TextView scrollable like a log
+        status.append(msg);
     }
 
     @Override
@@ -120,9 +121,8 @@ public class MainActivity extends Activity implements
 
     @Override
     public void onUsbConnected() {
-        final String deviceInfo = mUsb.getDeviceInfo(mUsb.getUsbDevice());
-        mTv.setText(deviceInfo);
-        mDfu.setmUsb(mUsb);
-        mDfu.setDeviceVersion(mUsb.getDeviceVersion());
+        final String deviceInfo = usb.getDeviceInfo(usb.getUsbDevice());
+        status.setText(deviceInfo);
+        dfu.setUsb(usb);
     }
 }

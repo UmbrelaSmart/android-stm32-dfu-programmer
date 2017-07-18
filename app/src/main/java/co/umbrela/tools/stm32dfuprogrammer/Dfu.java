@@ -53,26 +53,27 @@ public class Dfu {
     private final static int DFU_GETSTATE = 0x05;
     private final static int DFU_ABORT = 0x06;
 
-    private Usb mUsb;
-    private int mDeviceVID;
-    private int mDevicePID;
-    private int mDeviceVersion;  //STM bootloader version
-    private DfuFile mDfuFile;
+    private final int deviceVid;
+    private final int devicePid;
+    private final DfuFile dfuFile;
 
-    private List<DfuListener> listeners = new ArrayList<>();
+    private Usb usb;
+    private int deviceVersion;  //STM bootloader version
+
+    private final List<DfuListener> listeners = new ArrayList<>();
 
     public interface DfuListener {
         void onStatusMsg(String msg);
     }
 
     public Dfu(int usbVendorId, int usbProductId) {
-        mDeviceVID = usbVendorId;
-        mDevicePID = usbProductId;
+        this.deviceVid = usbVendorId;
+        this.devicePid = usbProductId;
 
-        mDfuFile = new DfuFile();
+        dfuFile = new DfuFile();
     }
 
-    private void statusMsg(final String msg) {
+    private void onStatusMsg(final String msg) {
         for (DfuListener listener : listeners) {
             listener.onStatusMsg(msg);
         }
@@ -83,19 +84,16 @@ public class Dfu {
         listeners.add(listener);
     }
 
-    public void setmUsb(Usb usb) {
-        mUsb = usb;
-    }
-
-    public void setDeviceVersion(int deviceVersion) {
-        mDeviceVersion = deviceVersion;
+    public void setUsb(Usb usb) {
+        this.usb = usb;
+        this.deviceVersion = this.usb.getDeviceVersion();
     }
 
     public void massErase() {
 
         // check if usb device is active
-        if (mUsb == null || !mUsb.isConnected()) {
-            statusMsg("No device connected");
+        if (usb == null || !usb.isConnected()) {
+            onStatusMsg("No device connected");
             return;
         }
 
@@ -110,7 +108,7 @@ public class Dfu {
 
             if (isDeviceProtected()) {
                 removeReadProtection();
-                statusMsg("Read Protection removed. Device resets...Wait until it re-enumerates ");
+                onStatusMsg("Read Protection removed. Device resets...Wait until it re-enumerates ");
                 return;
             }
 
@@ -123,12 +121,12 @@ public class Dfu {
                 clearStatus();
                 getStatus(dfuStatus);
             } while (dfuStatus.bState != STATE_DFU_IDLE);
-            statusMsg("Mass erase completed in " + (System.currentTimeMillis() - startTime) + " ms");
+            onStatusMsg("Mass erase completed in " + (System.currentTimeMillis() - startTime) + " ms");
 
         } catch (InterruptedException e) {
             e.printStackTrace();
         } catch (Exception e) {
-            statusMsg(e.toString());
+            onStatusMsg(e.toString());
         }
         return;
     }
@@ -136,8 +134,8 @@ public class Dfu {
     public void fastOperations() {
 
         // check if usb device is active
-        if (mUsb == null || !mUsb.isConnected()) {
-            statusMsg("No device connected");
+        if (usb == null || !usb.isConnected()) {
+            onStatusMsg("No device connected");
             return;
         }
 
@@ -147,7 +145,7 @@ public class Dfu {
         try {
 
             if (isDeviceProtected()) {
-                statusMsg("Device is Read-Protected...First Mass Erase");
+                onStatusMsg("Device is Read-Protected...First Mass Erase");
                 return;
             }
 
@@ -164,83 +162,83 @@ public class Dfu {
                     clearStatus();
                     getStatus(dfuStatus);
                 }
-                statusMsg("Fast Operations set (Parallelism x32)");
+                onStatusMsg("Fast Operations set (Parallelism x32)");
             } else {
-                statusMsg("Fast Operations was already set (Parallelism x32)");
+                onStatusMsg("Fast Operations was already set (Parallelism x32)");
             }
 
         } catch (Exception e) {
-            statusMsg(e.toString());
+            onStatusMsg(e.toString());
         }
     }
 
     public void program() {
 
-        if (mUsb == null || !mUsb.isConnected()) {
-            statusMsg("No device connected");
+        if (usb == null || !usb.isConnected()) {
+            onStatusMsg("No device connected");
             return;
         }
         try {
             if (isDeviceProtected()) {
-                statusMsg("Device is Read-Protected...First Mass Erase");
+                onStatusMsg("Device is Read-Protected...First Mass Erase");
                 return;
             }
 
             openFile();
             verifyFile();
             checkCompatibility();
-            statusMsg("File Path: " + mDfuFile.filePath + "\n");
-            statusMsg("File Size: " + mDfuFile.buffer.length + " Bytes \n");
-            statusMsg("ElementAddress: 0x" + Integer.toHexString(mDfuFile.fwStartAddress));
-            statusMsg("\tElementSize: " + mDfuFile.fwLength + " Bytes\n");
-            statusMsg("Start writing file in blocks of " + mDfuFile.maxBlockSize + " Bytes \n");
+            onStatusMsg("File Path: " + dfuFile.filePath + "\n");
+            onStatusMsg("File Size: " + dfuFile.buffer.length + " Bytes \n");
+            onStatusMsg("ElementAddress: 0x" + Integer.toHexString(dfuFile.fwStartAddress));
+            onStatusMsg("\tElementSize: " + dfuFile.fwLength + " Bytes\n");
+            onStatusMsg("Start writing file in blocks of " + dfuFile.maxBlockSize + " Bytes \n");
 
             long startTime = System.currentTimeMillis();
             writeImage();
-            statusMsg("Programming completed in " + (System.currentTimeMillis() - startTime) + " ms\n");
+            onStatusMsg("Programming completed in " + (System.currentTimeMillis() - startTime) + " ms\n");
 
-            //statusMsg("Detached and starting application");
-            // detach(mDfuFile.fwStartAddress);
+            //onStatusMsg("Detached and starting application");
+            // detach(dfuFile.fwStartAddress);
         } catch (Exception e) {
             e.printStackTrace();
-            statusMsg(e.toString());
+            onStatusMsg(e.toString());
         }
-        // mUsb.release();
+        // usb.release();
     }
 
     public void verify() {
-        if (mUsb == null || !mUsb.isConnected()) {
-            statusMsg("No device connected");
+        if (usb == null || !usb.isConnected()) {
+            onStatusMsg("No device connected");
             return;
         }
 
         try {
             if (isDeviceProtected()) {
-                statusMsg("Device is Read-Protected...First Mass Erase");
+                onStatusMsg("Device is Read-Protected...First Mass Erase");
                 return;
             }
 
-            if (mDfuFile.filePath == null) {
+            if (dfuFile.filePath == null) {
                 openFile();
                 verifyFile();
                 checkCompatibility();
             }
 
-            byte[] deviceFirmware = new byte[mDfuFile.fwLength];
+            byte[] deviceFirmware = new byte[dfuFile.fwLength];
             readImage(deviceFirmware);
 
             // create byte buffer and compare content
-            ByteBuffer fileFw = ByteBuffer.wrap(mDfuFile.buffer, mDfuFile.fwOffset, mDfuFile.fwLength);    // set offset and limit of firmware
+            ByteBuffer fileFw = ByteBuffer.wrap(dfuFile.buffer, dfuFile.fwOffset, dfuFile.fwLength);    // set offset and limit of firmware
             ByteBuffer deviceFw = ByteBuffer.wrap(deviceFirmware);    // wrap whole array
 
             if (fileFw.equals(deviceFw)) {        // compares type, length, content
-                statusMsg("device firmware equals file firmware");
+                onStatusMsg("device firmware equals file firmware");
             } else {
-                statusMsg("device firmware does not equals file firmware");
+                onStatusMsg("device firmware does not equals file firmware");
             }
         } catch (Exception e) {
             e.printStackTrace();
-            statusMsg(e.toString());
+            onStatusMsg(e.toString());
         }
     }
 
@@ -251,7 +249,7 @@ public class Dfu {
         if (dfuStatus.bState != STATE_DFU_DOWNLOAD_BUSY) {
             throw new Exception("Failed to execute unprotect command");
         }
-        mUsb.release();
+        usb.release();
     }
 
     private void readDeviceFeature(byte[] configBytes) throws Exception {
@@ -287,28 +285,28 @@ public class Dfu {
 
     private void writeImage() throws Exception {
 
-        int address = mDfuFile.fwStartAddress;  // flash start address
-        int BufferOffset = mDfuFile.fwOffset;   // index offset of buffer
-        int blockSize = mDfuFile.maxBlockSize;   // max block size
-        byte[] Block = new byte[blockSize];
-        int NumOfBlocks = mDfuFile.fwLength / blockSize;
+        int address = dfuFile.fwStartAddress;  // flash start address
+        int bufferOffset = dfuFile.fwOffset;   // index offset of buffer
+        int blockSize = dfuFile.maxBlockSize;   // max block size
+        byte[] block = new byte[blockSize];
+        int numBlocks = dfuFile.fwLength / blockSize;
         int blockNum;
 
-        for (blockNum = 0; blockNum < NumOfBlocks; blockNum++) {
-            System.arraycopy(mDfuFile.buffer, (blockNum * blockSize) + BufferOffset, Block, 0, blockSize);
+        for (blockNum = 0; blockNum < numBlocks; blockNum++) {
+            System.arraycopy(dfuFile.buffer, (blockNum * blockSize) + bufferOffset, block, 0, blockSize);
             // send out the block to device
-            writeBlock(address, Block, blockNum);
+            writeBlock(address, block, blockNum);
         }
         // check if last block is partial
-        int remainder = mDfuFile.fwLength - (blockNum * blockSize);
+        int remainder = dfuFile.fwLength - (blockNum * blockSize);
         if (remainder > 0) {
-            System.arraycopy(mDfuFile.buffer, (blockNum * blockSize) + BufferOffset, Block, 0, remainder);
+            System.arraycopy(dfuFile.buffer, (blockNum * blockSize) + bufferOffset, block, 0, remainder);
             // Pad with 0xFF so our CRC matches the ST Bootloader and the ULink's CRC
-            while (remainder < Block.length) {
-                Block[remainder++] = (byte) 0xFF;
+            while (remainder < block.length) {
+                block[remainder++] = (byte) 0xFF;
             }
             // send out the block to device
-            writeBlock(address, Block, blockNum);
+            writeBlock(address, block, blockNum);
         }
     }
 
@@ -316,8 +314,8 @@ public class Dfu {
     private void readImage(byte[] deviceFw) throws Exception {
 
         DfuStatus dfuStatus = new DfuStatus();
-        int maxBlockSize = mDfuFile.maxBlockSize;
-        int startAddress = mDfuFile.fwStartAddress;
+        int maxBlockSize = dfuFile.maxBlockSize;
+        int startAddress = dfuFile.fwStartAddress;
         byte[] block = new byte[maxBlockSize];
         int nBlock;
         int remLength = deviceFw.length;
@@ -384,12 +382,12 @@ public class Dfu {
         if (myFileName == null) throw new Exception("No .dfu file found in Download Folder");
 
         myFile = new File(myFilePath + "/" + myFileName);
-        mDfuFile.filePath = myFile.toString();
-        mDfuFile.buffer = new byte[(int) myFile.length()];
+        dfuFile.filePath = myFile.toString();
+        dfuFile.buffer = new byte[(int) myFile.length()];
 
         //convert file into byte array
         fileInputStream = new FileInputStream(myFile);
-        fileInputStream.read(mDfuFile.buffer);
+        fileInputStream.read(dfuFile.buffer);
         fileInputStream.close();
     }
 
@@ -397,89 +395,89 @@ public class Dfu {
 
         // todo for now i expect the file to be not corrupted
 
-        int Length = mDfuFile.buffer.length;
+        int length = dfuFile.buffer.length;
 
-        int crcIndex = Length - 4;
+        int crcIndex = length - 4;
         int crc = 0;
-        crc |= mDfuFile.buffer[crcIndex++] & 0xFF;
-        crc |= (mDfuFile.buffer[crcIndex++] & 0xFF) << 8;
-        crc |= (mDfuFile.buffer[crcIndex++] & 0xFF) << 16;
-        crc |= (mDfuFile.buffer[crcIndex] & 0xFF) << 24;
+        crc |= dfuFile.buffer[crcIndex++] & 0xFF;
+        crc |= (dfuFile.buffer[crcIndex++] & 0xFF) << 8;
+        crc |= (dfuFile.buffer[crcIndex++] & 0xFF) << 16;
+        crc |= (dfuFile.buffer[crcIndex] & 0xFF) << 24;
         // do crc check
-        if (crc != calculateCRC(mDfuFile.buffer)) {
+        if (crc != calculateCRC(dfuFile.buffer)) {
             throw new Exception("CRC Failed");
         }
 
         // Check the prefix
-        String prefix = new String(mDfuFile.buffer, 0, 5);
+        String prefix = new String(dfuFile.buffer, 0, 5);
         if (prefix.compareTo("DfuSe") != 0) {
             throw new Exception("File signature error");
         }
 
         // check dfuSe Version
-        if (mDfuFile.buffer[5] != 1) {
+        if (dfuFile.buffer[5] != 1) {
             throw new Exception("DFU file version must be 1");
         }
 
         // Check the suffix
-        String suffix = new String(mDfuFile.buffer, Length - 8, 3);
+        String suffix = new String(dfuFile.buffer, length - 8, 3);
         if (suffix.compareTo("UFD") != 0) {
             throw new Exception("File suffix error");
         }
-        if ((mDfuFile.buffer[Length - 5] != 16) || (mDfuFile.buffer[Length - 10] != 0x1A) || (mDfuFile.buffer[Length - 9] != 0x01)) {
+        if ((dfuFile.buffer[length - 5] != 16) || (dfuFile.buffer[length - 10] != 0x1A) || (dfuFile.buffer[length - 9] != 0x01)) {
             throw new Exception("File number error");
         }
 
         // Now check the target prefix, we assume there is only one target in the file
-        String target = new String(mDfuFile.buffer, 11, 6);
+        String target = new String(dfuFile.buffer, 11, 6);
         if (target.compareTo("Target") != 0) {
             throw new Exception("Target signature error");
         }
 
         // Get Element Flash start address and size
-        mDfuFile.fwStartAddress = mDfuFile.buffer[285] & 0xFF;
-        mDfuFile.fwStartAddress |= (mDfuFile.buffer[286] & 0xFF) << 8;
-        mDfuFile.fwStartAddress |= (mDfuFile.buffer[287] & 0xFF) << 16;
-        mDfuFile.fwStartAddress |= (mDfuFile.buffer[288] & 0xFF) << 24;
+        dfuFile.fwStartAddress = dfuFile.buffer[285] & 0xFF;
+        dfuFile.fwStartAddress |= (dfuFile.buffer[286] & 0xFF) << 8;
+        dfuFile.fwStartAddress |= (dfuFile.buffer[287] & 0xFF) << 16;
+        dfuFile.fwStartAddress |= (dfuFile.buffer[288] & 0xFF) << 24;
 
-        mDfuFile.fwLength = mDfuFile.buffer[289] & 0xFF;
-        mDfuFile.fwLength |= (mDfuFile.buffer[290] & 0xFF) << 8;
-        mDfuFile.fwLength |= (mDfuFile.buffer[291] & 0xFF) << 16;
-        mDfuFile.fwLength |= (mDfuFile.buffer[292] & 0xFF) << 24;
+        dfuFile.fwLength = dfuFile.buffer[289] & 0xFF;
+        dfuFile.fwLength |= (dfuFile.buffer[290] & 0xFF) << 8;
+        dfuFile.fwLength |= (dfuFile.buffer[291] & 0xFF) << 16;
+        dfuFile.fwLength |= (dfuFile.buffer[292] & 0xFF) << 24;
 
-        if (mDfuFile.fwLength < 32) {
+        if (dfuFile.fwLength < 32) {
             throw new Exception("Firmware length too short");
         }
 
         // Get VID, PID and version number
-        mDfuFile.VID = (mDfuFile.buffer[Length - 11] & 0xFF) << 8;
-        mDfuFile.VID |= (mDfuFile.buffer[Length - 12] & 0xFF);
-        mDfuFile.PID = (mDfuFile.buffer[Length - 13] & 0xFF) << 8;
-        mDfuFile.PID |= (mDfuFile.buffer[Length - 14] & 0xFF);
-        mDfuFile.Version = (mDfuFile.buffer[Length - 15] & 0xFF) << 8;
-        mDfuFile.Version |= (mDfuFile.buffer[Length - 16] & 0xFF);
+        dfuFile.VID = (dfuFile.buffer[length - 11] & 0xFF) << 8;
+        dfuFile.VID |= (dfuFile.buffer[length - 12] & 0xFF);
+        dfuFile.PID = (dfuFile.buffer[length - 13] & 0xFF) << 8;
+        dfuFile.PID |= (dfuFile.buffer[length - 14] & 0xFF);
+        dfuFile.Version = (dfuFile.buffer[length - 15] & 0xFF) << 8;
+        dfuFile.Version |= (dfuFile.buffer[length - 16] & 0xFF);
     }
 
     private void checkCompatibility() throws Exception {
 
-        if ((mDevicePID != mDfuFile.PID) || (mDeviceVID != mDfuFile.VID)) {
+        if ((devicePid != dfuFile.PID) || (deviceVid != dfuFile.VID)) {
             throw new Exception("PID/VID Miss match");
         }
 
         // give warning and continue on
-        if (mDeviceVersion != mDfuFile.Version) {
-            statusMsg("Warning: Device Version: " + Integer.toHexString(mDeviceVersion) +
-                    "\tFile Version: " + Integer.toHexString(mDfuFile.Version) + "\n");
+        if (deviceVersion != dfuFile.Version) {
+            onStatusMsg("Warning: Device Version: " + Integer.toHexString(deviceVersion) +
+                    "\tFile Version: " + Integer.toHexString(dfuFile.Version) + "\n");
         }
 
-        switch (mDeviceVersion) {
+        switch (deviceVersion) {
             case 0x011A:
             case 0x0200:
-                mDfuFile.maxBlockSize = 1024;
+                dfuFile.maxBlockSize = 1024;
                 break;
             case 0x2100:
             case 0x2200:
-                mDfuFile.maxBlockSize = 2048;
+                dfuFile.maxBlockSize = 2048;
                 break;
             default:
                 throw new Exception("Error: Unsupported bootloader version\n");
@@ -592,8 +590,6 @@ public class Dfu {
         buffer[3] = (byte) ((Address >> 16) & 0xFF);
         buffer[4] = (byte) ((Address >> 24) & 0xFF);
         download(buffer, 5);
-
-
     }
 
     private void leaveDfu() throws Exception {
@@ -602,7 +598,7 @@ public class Dfu {
 
     private void getStatus(DfuStatus status) throws Exception {
         byte[] buffer = new byte[6];
-        int length = mUsb.controlTransfer(DFU_RequestType | USB_DIR_IN, DFU_GETSTATUS, 0, 0, buffer, 6, 500);
+        int length = usb.controlTransfer(DFU_RequestType | USB_DIR_IN, DFU_GETSTATUS, 0, 0, buffer, 6, 500);
 
         if (length < 0) {
             throw new Exception("USB Failed during getStatus");
@@ -615,7 +611,7 @@ public class Dfu {
     }
 
     private void clearStatus() throws Exception {
-        int length = mUsb.controlTransfer(DFU_RequestType, DFU_CLRSTATUS, 0, 0, null, 0, 0);
+        int length = usb.controlTransfer(DFU_RequestType, DFU_CLRSTATUS, 0, 0, null, 0, 0);
         if (length < 0) {
             throw new Exception("USB Failed during clearStatus");
         }
@@ -623,7 +619,7 @@ public class Dfu {
 
     // use for commands
     private void download(byte[] data, int length) throws Exception {
-        int len = mUsb.controlTransfer(DFU_RequestType, DFU_DNLOAD, 0, 0, data, length, 0);
+        int len = usb.controlTransfer(DFU_RequestType, DFU_DNLOAD, 0, 0, data, length, 0);
         if (len < 0) {
             throw new Exception("USB Failed during command download");
         }
@@ -631,14 +627,14 @@ public class Dfu {
 
     // use for firmware download
     private void download(byte[] data, int length, int nBlock) throws Exception {
-        int len = mUsb.controlTransfer(DFU_RequestType, DFU_DNLOAD, nBlock, 0, data, length, 0);
+        int len = usb.controlTransfer(DFU_RequestType, DFU_DNLOAD, nBlock, 0, data, length, 0);
         if (len < 0) {
             throw new Exception("USB failed during firmware download");
         }
     }
 
     private void upload(byte[] data, int length, int blockNum) throws Exception {
-        int len = mUsb.controlTransfer(DFU_RequestType | USB_DIR_IN, DFU_UPLOAD, blockNum, 0, data, length, 100);
+        int len = usb.controlTransfer(DFU_RequestType | USB_DIR_IN, DFU_UPLOAD, blockNum, 0, data, length, 100);
         if (len < 0) {
             throw new Exception("USB comm failed during upload");
         }
@@ -647,7 +643,7 @@ public class Dfu {
     private static int calculateCRC(byte[] FileData) {
         int crc = -1;
         for (int i = 0; i < FileData.length - 4; i++) {
-            crc = CrcTable[(crc ^ FileData[i]) & 0xff] ^ (crc >>> 8);
+            crc = CRC_TABLE[(crc ^ FileData[i]) & 0xff] ^ (crc >>> 8);
         }
         return crc;
     }
@@ -673,7 +669,7 @@ public class Dfu {
         int fwLength;
     }
 
-    private static final int[] CrcTable = {
+    private final static int[] CRC_TABLE = {
             0x00000000, 0x77073096, 0xee0e612c, 0x990951ba, 0x076dc419, 0x706af48f,
             0xe963a535, 0x9e6495a3, 0x0edb8832, 0x79dcb8a4, 0xe0d5e91e, 0x97d2d988,
             0x09b64c2b, 0x7eb17cbd, 0xe7b82d07, 0x90bf1d91, 0x1db71064, 0x6ab020f2,

@@ -14,11 +14,11 @@
   ~ limitations under the License.
   -->
 <ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:tools="http://schemas.android.com/tools"
-    android:id="@+id/scrollView"
-    android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    tools:context=".MainActivity">
+            xmlns:tools="http://schemas.android.com/tools"
+            android:id="@+id/scrollView"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            tools:context=".MainActivity">
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -34,11 +34,11 @@
             android:paddingTop="@dimen/activity_vertical_margin">
 
             <TextView
-                android:id="@+id/my_textview"
+                android:id="@+id/status"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="32dp"
-                android:text="@string/device_status" />
+                android:text="@string/device_status"/>
 
             <Button
                 android:id="@+id/btnMassErase"
@@ -46,21 +46,21 @@
                 android:layout_height="wrap_content"
                 android:layout_alignParentLeft="true"
                 android:layout_alignParentStart="true"
-                android:layout_below="@+id/my_textview"
+                android:layout_below="@+id/status"
                 android:clickable="true"
-                android:text="Mass Erase" />
+                android:text="Mass Erase"/>
 
             <Button
                 android:id="@+id/btnProgram"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
+                android:layout_alignEnd="@+id/btnMassErase"
                 android:layout_alignParentLeft="true"
                 android:layout_alignParentStart="true"
+                android:layout_alignRight="@+id/btnMassErase"
                 android:layout_below="@+id/btnMassErase"
                 android:clickable="true"
-                android:text="Program"
-                android:layout_alignRight="@+id/btnMassErase"
-                android:layout_alignEnd="@+id/btnMassErase" />
+                android:text="Program"/>
 
 
             <TextView
@@ -70,8 +70,7 @@
                 android:layout_alignParentLeft="true"
                 android:layout_alignParentStart="true"
                 android:layout_below="@+id/btnProgram"
-                android:layout_marginTop="32dp"
-                android:text="not used" />
+                android:layout_marginTop="32dp"/>
 
 
             <Button
@@ -83,19 +82,19 @@
                 android:layout_toEndOf="@+id/btnMassErase"
                 android:layout_toRightOf="@+id/btnMassErase"
                 android:clickable="true"
-                android:text="Fast Operations" />
+                android:text="Fast Operations"/>
 
             <Button
+                android:id="@+id/btnVerify"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Verify"
-                android:id="@+id/btnVerify"
                 android:layout_alignBottom="@+id/btnProgram"
-                android:clickable="true"
-                android:layout_alignRight="@+id/btnForceErase"
                 android:layout_alignEnd="@+id/btnForceErase"
                 android:layout_alignLeft="@+id/btnForceErase"
-                android:layout_alignStart="@+id/btnForceErase" />
+                android:layout_alignRight="@+id/btnForceErase"
+                android:layout_alignStart="@+id/btnForceErase"
+                android:clickable="true"
+                android:text="Verify"/>
 
 
         </RelativeLayout>
