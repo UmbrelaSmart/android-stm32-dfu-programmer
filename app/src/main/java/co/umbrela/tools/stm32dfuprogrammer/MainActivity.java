@@ -77,7 +77,7 @@ public class MainActivity extends Activity implements
             }
         });
 
-        Button enterDfu = (Button) findViewById(R.id.btnEnterDFU);
+        Button enterDfu = findViewById(R.id.btnEnterDFU);
         enterDfu.setOnClickListener(new Button.OnClickListener(){
             @Override
             public void onClick(View v){
@@ -85,15 +85,15 @@ public class MainActivity extends Activity implements
             }
         });
 
-        Button leaveDfu = (Button) findViewById(R.id.btnLeaveDFU);
+        Button leaveDfu = findViewById(R.id.btnLeaveDFU);
         leaveDfu.setOnClickListener(new Button.OnClickListener(){
             @Override
             public void onClick(View v){
                 //Outputs.leaveDfuMode();
-                mDfu.leaveDfuMode();
+                dfu.leaveDfuMode();
             }
         });
-        Button releaseReset = (Button) findViewById(R.id.btnReleaseReset);
+        Button releaseReset = findViewById(R.id.btnReleaseReset);
         releaseReset.setOnClickListener(new Button.OnClickListener(){
             @Override
             public void onClick(View v){
@@ -114,9 +114,9 @@ public class MainActivity extends Activity implements
         usb.setOnUsbChangeListener(this);
 
         // Handle two types of intents. Device attachment and permission
-        registerReceiver(mUsb.getmUsbReceiver(), new IntentFilter(Usb.ACTION_USB_PERMISSION));
-        registerReceiver(mUsb.getmUsbReceiver(), new IntentFilter(UsbManager.ACTION_USB_DEVICE_ATTACHED));
-        registerReceiver(mUsb.getmUsbReceiver(), new IntentFilter(UsbManager.ACTION_USB_DEVICE_DETACHED));
+        registerReceiver(usb.getmUsbReceiver(), new IntentFilter(Usb.ACTION_USB_PERMISSION));
+        registerReceiver(usb.getmUsbReceiver(), new IntentFilter(UsbManager.ACTION_USB_DEVICE_ATTACHED));
+        registerReceiver(usb.getmUsbReceiver(), new IntentFilter(UsbManager.ACTION_USB_DEVICE_DETACHED));
 
 
         // Handle case where USB device is connected before app launches;

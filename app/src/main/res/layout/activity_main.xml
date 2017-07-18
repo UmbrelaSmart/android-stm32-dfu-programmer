@@ -102,7 +102,7 @@
                 android:layout_height="wrap_content"
                 android:clickable="true"
                 android:text="Enter DFU mode"
-                android:layout_below="@+id/my_textview"
+                android:layout_below="@+id/status"
                 android:layout_toRightOf="@+id/btnForceErase"
                 android:layout_toEndOf="@+id/btnForceErase" />
 
@@ -121,7 +121,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:clickable="true"
-                android:layout_below="@+id/my_textview"
+                android:layout_below="@+id/status"
                 android:layout_toRightOf="@+id/btnEnterDFU"
                 android:text="Normal Mode" />
 
