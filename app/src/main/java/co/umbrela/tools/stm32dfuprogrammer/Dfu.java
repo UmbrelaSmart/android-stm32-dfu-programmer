@@ -24,6 +24,7 @@ import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
 
+@SuppressWarnings("unused")
 public class Dfu {
 
     private final static int USB_DIR_OUT = 0;
@@ -91,7 +92,6 @@ public class Dfu {
 
     public void massErase() {
 
-        // check if usb device is active
         if (!isUsbConnected()) return;
 
         DfuStatus dfuStatus = new DfuStatus();
@@ -125,16 +125,14 @@ public class Dfu {
         } catch (Exception e) {
             onStatusMsg(e.toString());
         }
-        return;
     }
 
     public void fastOperations() {
 
-        // check if usb device is active
         if (!isUsbConnected()) return;
 
-        DfuStatus dfuStatus = new DfuStatus();
-        byte[] configBytes = new byte[4];
+        final DfuStatus dfuStatus = new DfuStatus();
+        final byte[] configBytes = new byte[4];
 
         try {
 
@@ -169,6 +167,7 @@ public class Dfu {
     public void program() {
 
         if (!isUsbConnected()) return;
+
         try {
             if (isDeviceProtected()) {
                 onStatusMsg("Device is Read-Protected...First Mass Erase");
@@ -231,11 +230,12 @@ public class Dfu {
         }
     }
 
+    // check if usb device is active
     private boolean isUsbConnected() {
-        if (usb == null || !usb.isConnected()) {
-            onStatusMsg("No device connected");
+        if (usb != null && usb.isConnected()) {
             return true;
         }
+        onStatusMsg("No device connected");
         return false;
     }
 
@@ -384,6 +384,7 @@ public class Dfu {
 
         //convert file into byte array
         fileInputStream = new FileInputStream(myFile);
+        //noinspection ResultOfMethodCallIgnored
         fileInputStream.read(dfuFile.buffer);
         fileInputStream.close();
     }
