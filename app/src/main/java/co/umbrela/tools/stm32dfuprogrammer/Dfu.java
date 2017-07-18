@@ -92,10 +92,7 @@ public class Dfu {
     public void massErase() {
 
         // check if usb device is active
-        if (usb == null || !usb.isConnected()) {
-            onStatusMsg("No device connected");
-            return;
-        }
+        if (!isUsbConnected()) return;
 
         DfuStatus dfuStatus = new DfuStatus();
         long startTime = System.currentTimeMillis();  // note current time
@@ -134,10 +131,7 @@ public class Dfu {
     public void fastOperations() {
 
         // check if usb device is active
-        if (usb == null || !usb.isConnected()) {
-            onStatusMsg("No device connected");
-            return;
-        }
+        if (!isUsbConnected()) return;
 
         DfuStatus dfuStatus = new DfuStatus();
         byte[] configBytes = new byte[4];
@@ -174,10 +168,7 @@ public class Dfu {
 
     public void program() {
 
-        if (usb == null || !usb.isConnected()) {
-            onStatusMsg("No device connected");
-            return;
-        }
+        if (!isUsbConnected()) return;
         try {
             if (isDeviceProtected()) {
                 onStatusMsg("Device is Read-Protected...First Mass Erase");
@@ -207,10 +198,8 @@ public class Dfu {
     }
 
     public void verify() {
-        if (usb == null || !usb.isConnected()) {
-            onStatusMsg("No device connected");
-            return;
-        }
+
+        if (!isUsbConnected()) return;
 
         try {
             if (isDeviceProtected()) {
@@ -240,6 +229,14 @@ public class Dfu {
             e.printStackTrace();
             onStatusMsg(e.toString());
         }
+    }
+
+    private boolean isUsbConnected() {
+        if (usb == null || !usb.isConnected()) {
+            onStatusMsg("No device connected");
+            return true;
+        }
+        return false;
     }
 
     private void removeReadProtection() throws Exception {
