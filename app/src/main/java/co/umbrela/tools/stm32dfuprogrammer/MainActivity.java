@@ -27,7 +27,8 @@ import android.view.View;
 import android.widget.Button;
 import android.widget.TextView;
 
-public class MainActivity extends Activity implements Handler.Callback, Usb.OnUsbChangeListener {
+public class MainActivity extends Activity implements
+        Handler.Callback, Usb.OnUsbChangeListener, Dfu.DfuListener {
 
     private Usb mUsb;
     private Dfu mDfu;
@@ -40,10 +41,11 @@ public class MainActivity extends Activity implements Handler.Callback, Usb.OnUs
         setContentView(R.layout.activity_main);
 
         mDfu = new Dfu(Usb.USB_VENDOR_ID, Usb.USB_PRODUCT_ID);
-        mTv = (TextView) findViewById(R.id.my_textview);
-        mDfu.setTextView(mTv);
+        mDfu.setListener(this);
 
-        Button massErase = (Button) findViewById(R.id.btnMassErase);
+        mTv = findViewById(R.id.my_textview);
+
+        Button massErase = findViewById(R.id.btnMassErase);
         massErase.setOnClickListener(new Button.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -51,7 +53,7 @@ public class MainActivity extends Activity implements Handler.Callback, Usb.OnUs
             }
         });
 
-        Button program = (Button) findViewById(R.id.btnProgram);
+        Button program = findViewById(R.id.btnProgram);
         program.setOnClickListener(new Button.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -59,18 +61,18 @@ public class MainActivity extends Activity implements Handler.Callback, Usb.OnUs
             }
         });
 
-        Button forceErase = (Button) findViewById(R.id.btnForceErase);
-        forceErase.setOnClickListener(new Button.OnClickListener(){
+        Button forceErase = findViewById(R.id.btnForceErase);
+        forceErase.setOnClickListener(new Button.OnClickListener() {
             @Override
-            public void onClick(View v){
-              mDfu.fastOperations();
+            public void onClick(View v) {
+                mDfu.fastOperations();
             }
         });
 
-        Button verify = (Button) findViewById(R.id.btnVerify);
-        verify.setOnClickListener(new Button.OnClickListener(){
+        Button verify = findViewById(R.id.btnVerify);
+        verify.setOnClickListener(new Button.OnClickListener() {
             @Override
-            public void onClick(View v){
+            public void onClick(View v) {
                 mDfu.verify();
             }
         });
@@ -107,14 +109,18 @@ public class MainActivity extends Activity implements Handler.Callback, Usb.OnUs
     }
 
     @Override
+    public void onStatusMsg(String msg) {
+        mTv.append(msg);
+    }
+
+    @Override
     public boolean handleMessage(Message message) {
         return false;
     }
 
     @Override
     public void onUsbConnected() {
-
-        String deviceInfo = mUsb.getDeviceInfo(mUsb.getUsbDevice());
+        final String deviceInfo = mUsb.getDeviceInfo(mUsb.getUsbDevice());
         mTv.setText(deviceInfo);
         mDfu.setmUsb(mUsb);
         mDfu.setDeviceVersion(mUsb.getDeviceVersion());
