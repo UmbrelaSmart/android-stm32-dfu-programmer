@@ -37,6 +37,7 @@ public class Outputs {
 
     public static void enterNormalMode(){
         try{
+            setReset();
             clearReset();
             clearBoot();
             Log.i(TAG, "entered Normal mode successful");
