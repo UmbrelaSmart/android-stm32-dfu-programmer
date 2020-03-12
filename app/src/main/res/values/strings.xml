@@ -18,8 +18,7 @@
 <resources>
 
     <string name="app_name">STM32 DFU Programmer</string>
-    <string name="device_status">Hold the Boot0 button and connect the device using an OTG cable\n
-                                   Once completed, reopen the app</string>
+    <string name="device_status">Hold the BOOT0 button and connect the device using an OTG cable.\nOnce completed, reopen the app.\n</string>
     <string name="action_settings">Settings</string>
 
 </resources>
