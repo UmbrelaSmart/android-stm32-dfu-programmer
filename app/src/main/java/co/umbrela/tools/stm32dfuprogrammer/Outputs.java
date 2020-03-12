@@ -1,3 +1,19 @@
+/*
+ * Copyright 2015 Umbrela Smart, Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package co.umbrela.tools.stm32dfuprogrammer;
 
 import android.util.Log;
@@ -16,46 +32,53 @@ import java.io.IOException;
 
 public class Outputs {
 
-    private static final String TAG = "Umbrela Outputs";
+    private static final String TAG = "Umbrela STM32 DFU Programmer: Outputs";
+
     private static final String bootValuePath = "/sys/class/gpio_sw/PD1/data";
     private static final String resetValuePath = "/sys/class/gpio_sw/PD0/data";
 
     private static final File outBoot = new File(bootValuePath);
     private static final File outReset = new File(resetValuePath);
 
-    public static void enterDfuMode(){
-        try{
+    public static boolean enterDfuMode(){
+        try {
             setReset();
             setBoot();
             clearReset();
-            Log.i(TAG, "entered DFU mode successful");
+            Log.i(TAG, "Entered DFU mode successfully");
+            return true;
         } catch (IOException e) {
             Log.e(TAG, e.getMessage());
-            // e.printStackTrace();
+            //e.printStackTrace();
+            return false;
         }
     }
 
-    public static void enterNormalMode(){
-        try{
+    public static boolean leaveDfuMode(){
+        try {
             setReset();
-            clearReset();
             clearBoot();
-            Log.i(TAG, "entered Normal mode successful");
+            clearReset();
+            Log.i(TAG, "Exited DFU mode successfully");
+            return true;
         } catch (IOException e) {
             Log.e(TAG, e.getMessage());
-            // e.printStackTrace();
+            //e.printStackTrace();
+            return false;
         }
     }
 
-    public static void leaveDfuMode(){
-        try{
+    public static boolean enterNormalMode(){
+        try {
             setReset();
-            clearBoot();
             clearReset();
-            Log.i(TAG, "exited DFU mode successful");
+            clearBoot();
+            Log.i(TAG, "Entered Normal mode successfully");
+            return true;
         } catch (IOException e) {
             Log.e(TAG, e.getMessage());
-            // e.printStackTrace();
+            //e.printStackTrace();
+            return false;
         }
     }
 
